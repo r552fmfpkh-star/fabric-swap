@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Changeur de tissu</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a1a;min-height:100vh}
+.app{max-width:1100px;margin:0 auto;padding:24px 20px}
+h1{font-size:20px;font-weight:700;margin-bottom:4px}
+.subtitle{font-size:13px;color:#888;margin-bottom:24px}
+.panels{display:grid;grid-template-columns:260px 1fr;gap:20px;align-items:start}
+@media(max-width:700px){.panels{grid-template-columns:1fr}}
+.left{display:flex;flex-direction:column;gap:14px}
+.panel{background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:14px}
+.panel-title{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+.fabric-drop{border:2px dashed #ddd;border-radius:8px;padding:16px;text-align:center;cursor:pointer;position:relative;transition:border-color .15s}
+.fabric-drop:hover,.fabric-drop.over{border-color:#2563eb}
+.fabric-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.fabric-preview{width:100%;height:110px;object-fit:cover;border-radius:6px;display:block;margin-bottom:6px}
+.fabric-ph{padding:16px 0;color:#bbb;font-size:12px}
+.key-input{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:12px;font-family:monospace;color:#1a1a1a}
+.jacket-drop{border:2px dashed #ddd;border-radius:8px;padding:20px;text-align:center;cursor:pointer;position:relative;margin-bottom:10px;transition:border-color .15s}
+.jacket-drop:hover,.jacket-drop.over{border-color:#2563eb}
+.jacket-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.jgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.jcard{position:relative;border:2px solid #e5e5e5;border-radius:8px;overflow:hidden;background:#fff;transition:border-color .15s}
+.jcard.sel{border-color:#2563eb}
+.jcard.done{border-color:#16a34a}
+.jcard img{width:100%;height:120px;object-fit:cover;display:block;cursor:pointer}
+.jcard .jname{padding:4px 6px;font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jcard .jremove{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.jcard .jcheck{position:absolute;top:4px;left:4px;background:#2563eb;color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;display:flex;align-items:center;justify-content:center}
+.actions{background:#fff;border:1px solid #e5e5e5;border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.btn{padding:7px 14px;border:1px solid #ddd;border-radius:7px;font-size:13px;cursor:pointer;background:#fff;color:#1a1a1a}
+.btn:hover{background:#f0f0f0}
+.btn-go{background:#1a1a1a;color:#fff;border-color:#1a1a1a;font-weight:600;font-size:14px;padding:10px 24px}
+.btn-go:hover{background:#333}
+.btn-go:disabled{background:#bbb;border-color:#bbb;cursor:not-allowed}
+.sel-info{font-size:12px;color:#888;flex:1}
+.progress{height:4px;background:#e5e5e5;border-radius:2px;margin-bottom:8px;overflow:hidden}
+.progress-bar{height:100%;background:#2563eb;border-radius:2px;transition:width .4s;width:0}
+.stxt{font-size:12px;color:#555;margin-bottom:16px;min-height:18px}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:12px}
+.rcard{border:1px solid #e5e5e5;border-radius:10px;overflow:hidden;background:#fff}
+.rcard .rtop{position:relative}
+.rcard img{width:100%;display:block}
+.rcard .rbadge{position:absolute;top:7px;left:7px;background:#1a2744;color:#fff;font-size:9px;padding:2px 7px;border-radius:4px;font-weight:600}
+.rcard .rinfo{padding:8px 10px}
+.rcard .rname{font-size:11px;font-weight:600;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rcard a{font-size:11px;color:#2563eb;text-decoration:none}
+.rcard a:hover{text-decoration:underline}
+.rerr{font-size:10px;color:#dc2626;line-height:1.4;padding:12px}
+.spin{display:inline-block;width:22px;height:22px;border:3px solid #e5e5e5;border-top-color:#2563eb;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.loading-box{height:160px;background:#f9f9f9;display:flex;align-items:center;justify-content:center}
+.empty{text-align:center;padding:40px;color:#bbb;font-size:13px;border:1px dashed #ddd;border-radius:12px}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Changeur de tissu</h1>
+  <p class="subtitle">Uploadez vos vestes + votre échantillon de tissu — génération automatique</p>
+
+  <div class="panels">
+    <div class="left">
+      <div class="panel">
+        <div class="panel-title">Clé API Replicate</div>
+        <input class="key-input" type="password" id="apikey" placeholder="r8_..." value="r8_QiYBrxCixHAWKmHMPuUJZQZLoHMLMNn2wsZ6T"/>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Échantillon de tissu</div>
+        <div class="fabric-drop" id="fabricDrop">
+          <input type="file" accept="image/*" id="fabricInput" onchange="loadFabric(this.files[0])"/>
+          <img id="fabricImg" class="fabric-preview" style="display:none"/>
+          <div class="fabric-ph" id="fabricPh"><div style="font-size:26px;margin-bottom:6px">🧵</div>Cliquez ou glissez<br>votre échantillon ici</div>
+          <div id="fabricLbl" style="font-size:11px;color:#888;margin-top:4px"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Actions</div>
+        <button class="btn" style="width:100%;margin-bottom:6px" onclick="selectAll()">Tout sélectionner</button>
+        <button class="btn" style="width:100%;margin-bottom:6px" onclick="deselectAll()">Tout désélectionner</button>
+        <button class="btn" style="width:100%;color:#dc2626;border-color:#fca5a5" onclick="clearJackets()">Vider les vestes</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-title">Vos vestes</div>
+        <div class="jacket-drop" id="jacketDrop">
+          <input type="file" accept="image/*" multiple id="jacketInput" onchange="loadJackets(this.files)"/>
+          <div style="font-size:26px;margin-bottom:8px">👔</div>
+          <strong style="font-size:13px">Glissez vos photos ici</strong><br>
+          <span style="font-size:12px;color:#888">ou cliquez pour sélectionner (JPG, PNG — autant que vous voulez)</span>
+        </div>
+        <div id="jacketCount" style="font-size:12px;color:#2563eb;font-weight:500;margin-bottom:10px"></div>
+        <div class="jgrid" id="jgrid"></div>
+      </div>
+
+      <div class="actions">
+        <span class="sel-info" id="selInfo">0 veste(s) sélectionnée(s)</span>
+        <button class="btn btn-go" id="gbtn" onclick="runAll()" disabled>⚡ Générer les images</button>
+      </div>
+
+      <div class="progress"><div class="progress-bar" id="pb"></div></div>
+      <div class="stxt" id="stxt"></div>
+
+      <div id="resultsWrap">
+        <div class="empty" id="emptyMsg">Les images générées apparaîtront ici</div>
+        <div class="rgrid" id="rgrid" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let jackets = [];
+let fabricB64 = null;
+
+// ── FABRIC ──────────────────────────────────────────
+function loadFabric(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    fabricB64 = e.target.result;
+    document.getElementById('fabricImg').src = fabricB64;
+    document.getElementById('fabricImg').style.display = 'block';
+    document.getElementById('fabricPh').style.display = 'none';
+    document.getElementById('fabricLbl').textContent = file.name;
+    updateBtn();
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── JACKETS ─────────────────────────────────────────
+function loadJackets(files) {
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      jackets.push({ id: Date.now() + Math.random(), name: file.name.replace(/\.[^.]+$/, ''), b64: e.target.result, sel: true });
+      renderJackets();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderJackets() {
+  const selCount = jackets.filter(j => j.sel).length;
+  document.getElementById('jacketCount').textContent = jackets.length + ' photo(s) chargée(s)';
+  document.getElementById('selInfo').textContent = selCount + ' veste(s) sélectionnée(s)';
+  updateBtn();
+  const grid = document.getElementById('jgrid');
+  grid.innerHTML = '';
+  jackets.forEach((j, i) => {
+    const d = document.createElement('div');
+    d.className = 'jcard' + (j.sel ? ' sel' : '');
+    d.innerHTML = `<img src="${j.b64}" onclick="toggleJ(${i})"/>${j.sel ? '<div class="jcheck">✓</div>' : ''}<button class="jremove" onclick="removeJ(${i})">×</button><div class="jname">${j.name}</div>`;
+    grid.appendChild(d);
+  });
+}
+
+function toggleJ(i) { jackets[i].sel = !jackets[i].sel; renderJackets(); }
+function selectAll() { jackets.forEach(j => j.sel = true); renderJackets(); }
+function deselectAll() { jackets.forEach(j => j.sel = false); renderJackets(); }
+function removeJ(i) { jackets.splice(i, 1); renderJackets(); }
+function clearJackets() { jackets = []; renderJackets(); document.getElementById('jacketCount').textContent = ''; }
+function updateBtn() { document.getElementById('gbtn').disabled = !fabricB64 || jackets.filter(j=>j.sel).length === 0; }
+
+// ── DRAG & DROP ──────────────────────────────────────
+document.getElementById('jacketDrop').addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('over'); });
+document.getElementById('jacketDrop').addEventListener('dragleave', e => e.currentTarget.classList.remove('over'));
+document.getElementById('jacketDrop').addEventListener('drop', e => { e.preventDefault(); e.currentTarget.classList.remove('over'); loadJackets(e.dataTransfer.files); });
+document.getElementById('fabricDrop').addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('over'); });
+document.getElementById('fabricDrop').addEventListener('dragleave', e => e.currentTarget.classList.remove('over'));
+document.getElementById('fabricDrop').addEventListener('drop', e => { e.preventDefault(); e.currentTarget.classList.remove('over'); loadFabric(e.dataTransfer.files[0]); });
+
+// ── RESIZE ───────────────────────────────────────────
+async function resize(dataUrl, maxW, quality) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => {
+      const w = Math.min(img.naturalWidth, maxW);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = Math.round(img.naturalHeight * w / img.naturalWidth);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      res(c.toDataURL('image/jpeg', quality).split(',')[1]);
+    };
+    img.src = dataUrl;
+  });
+}
+
+// ── REPLICATE ────────────────────────────────────────
+async function runPrediction(jacketB64, fabB64, key) {
+  // Use SDXL img2img via Replicate — send image as base64 data URI
+  const body = {
+    version: "ac732df83cea7fff18b8472768c88ad041fa750ed7461c7ede723d0b49491bdf",
+    input: {
+      prompt: "suit jacket on white mannequin, fabric texture changed to match fabric swatch, same jacket shape silhouette lapels pockets buttons, white background, photorealistic product photography, studio lighting",
+      image: "data:image/jpeg;base64," + jacketB64,
+      prompt_strength: 0.55,
+      num_inference_steps: 30,
+      guidance_scale: 7.5,
+      num_outputs: 1
+    }
+  };
+  const r = await fetch('https://api.replicate.com/v1/predictions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Token ' + key, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) { const e = await r.json(); throw new Error(e.detail || JSON.stringify(e)); }
+  const pred = await r.json();
+
+  // Poll
+  for (let i = 0; i < 90; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    const p = await fetch('https://api.replicate.com/v1/predictions/' + pred.id, { headers: { 'Authorization': 'Token ' + key } });
+    const d = await p.json();
+    if (d.status === 'succeeded') return d.output?.[0];
+    if (d.status === 'failed') throw new Error(d.error || 'Génération échouée');
+  }
+  throw new Error('Timeout — réessayez');
+}
+
+// ── RESULT CARDS ─────────────────────────────────────
+function setCard(id, name, state, url, err) {
+  const rg = document.getElementById('rgrid');
+  rg.style.display = 'grid';
+  document.getElementById('emptyMsg').style.display = 'none';
+  let el = document.getElementById('rc' + id);
+  if (!el) { el = document.createElement('div'); el.className = 'rcard'; el.id = 'rc' + id; rg.appendChild(el); }
+  if (state === 'loading') {
+    el.innerHTML = `<div class="loading-box"><div class="spin"></div></div><div class="rinfo"><div class="rname">${name}</div><div style="font-size:10px;color:#888;margin-top:2px">Génération en cours...</div></div>`;
+  } else if (state === 'done') {
+    el.innerHTML = `<div class="rtop"><img src="${url}"/><span class="rbadge">Nouveau tissu</span></div><div class="rinfo"><div class="rname">${name}</div><a href="${url}" target="_blank" download="${name}_nouveau_tissu.jpg">Télécharger</a></div>`;
+  } else {
+    el.innerHTML = `<div class="rerr">❌ ${err}</div><div class="rinfo"><div class="rname">${name}</div></div>`;
+  }
+}
+
+// ── MAIN ─────────────────────────────────────────────
+async function runAll() {
+  const key = document.getElementById('apikey').value.trim();
+  if (!key) { alert('Entrez votre clé API Replicate'); return; }
+  if (!fabricB64) { alert('Uploadez un échantillon de tissu'); return; }
+  const toProcess = jackets.filter(j => j.sel);
+  if (!toProcess.length) { alert('Sélectionnez au moins une veste'); return; }
+
+  const btn = document.getElementById('gbtn');
+  btn.disabled = true; btn.textContent = '⏳ Génération...';
+  document.getElementById('pb').style.width = '0';
+  document.getElementById('rgrid').innerHTML = '';
+  document.getElementById('rgrid').style.display = 'none';
+  document.getElementById('emptyMsg').style.display = 'block';
+
+  const st = document.getElementById('stxt');
+  st.textContent = 'Préparation...';
+
+  // Pre-resize fabric
+  const fabSmall = await resize(fabricB64, 512, 0.9);
+
+  let done = 0;
+  toProcess.forEach(j => setCard(j.id, j.name, 'loading'));
+
+  await Promise.all(toProcess.map(async j => {
+    try {
+      st.textContent = `Traitement "${j.name}"...`;
+      const jSmall = await resize(j.b64, 768, 0.9);
+      const url = await runPrediction(jSmall, fabSmall, key);
+      setCard(j.id, j.name, 'done', url, null);
+    } catch(e) {
+      setCard(j.id, j.name, 'error', null, e.message);
+    }
+    done++;
+    document.getElementById('pb').style.width = Math.round(done / toProcess.length * 100) + '%';
+    st.textContent = done + '/' + toProcess.length + ' veste(s) traitée(s)';
+  }));
+
+  st.textContent = '✅ Terminé — ' + done + ' veste(s) générée(s)';
+  btn.disabled = false; btn.textContent = '⚡ Générer les images';
+}
+</script>
+</body>
+</html>
