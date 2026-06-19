@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
@@ -20,14 +20,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .fabric-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .fabric-preview{width:100%;height:110px;object-fit:cover;border-radius:6px;display:block;margin-bottom:6px}
 .fabric-ph{padding:16px 0;color:#bbb;font-size:12px}
-.key-input{width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:7px;font-size:12px;font-family:monospace;color:#1a1a1a}
 .jacket-drop{border:2px dashed #ddd;border-radius:8px;padding:20px;text-align:center;cursor:pointer;position:relative;margin-bottom:10px;transition:border-color .15s}
 .jacket-drop:hover,.jacket-drop.over{border-color:#2563eb}
 .jacket-drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
 .jgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
-.jcard{position:relative;border:2px solid #e5e5e5;border-radius:8px;overflow:hidden;background:#fff;transition:border-color .15s}
+.jcard{position:relative;border:2px solid #e5e5e5;border-radius:8px;overflow:hidden;background:#fff}
 .jcard.sel{border-color:#2563eb}
 .jcard.done{border-color:#16a34a}
+.jcard.processing{border-color:#f59e0b}
 .jcard img{width:100%;height:120px;object-fit:cover;display:block;cursor:pointer}
 .jcard .jname{padding:4px 6px;font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .jcard .jremove{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center}
@@ -54,30 +54,51 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .rerr{font-size:10px;color:#dc2626;line-height:1.4;padding:12px}
 .spin{display:inline-block;width:22px;height:22px;border:3px solid #e5e5e5;border-top-color:#2563eb;border-radius:50%;animation:sp .7s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
-.loading-box{height:160px;background:#f9f9f9;display:flex;align-items:center;justify-content:center}
+.loading-box{height:160px;background:#f9f9f9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
 .empty{text-align:center;padding:40px;color:#bbb;font-size:13px;border:1px dashed #ddd;border-radius:12px}
+.concurrency-info{font-size:11px;color:#888;margin-top:6px}
 </style>
 </head>
 <body>
 <div class="app">
   <h1>Changeur de tissu</h1>
-  <p class="subtitle">Uploadez vos vestes + votre échantillon de tissu — génération automatique</p>
+  <p class="subtitle">Uploadez vos vestes + votre échantillon — génération automatique via Replicate</p>
  
   <div class="panels">
     <div class="left">
       <div class="panel">
-        <div class="panel-title">Clé API Replicate</div>
-        <input class="key-input" type="password" id="apikey" placeholder="r8_..." value="r8_QiYBrxCixHAWKmHMPuUJZQZLoHMLMNn2wsZ6T"/>
-      </div>
-      <div class="panel">
         <div class="panel-title">Échantillon de tissu</div>
         <div class="fabric-drop" id="fabricDrop">
-          <input type="file" accept="image/*" id="fabricInput" onchange="loadFabric(this.files[0])"/>
+          <input type="file" accept="image/*" onchange="loadFabric(this.files[0])"/>
           <img id="fabricImg" class="fabric-preview" style="display:none"/>
           <div class="fabric-ph" id="fabricPh"><div style="font-size:26px;margin-bottom:6px">🧵</div>Cliquez ou glissez<br>votre échantillon ici</div>
           <div id="fabricLbl" style="font-size:11px;color:#888;margin-top:4px"></div>
         </div>
       </div>
+ 
+      <div class="panel">
+        <div class="panel-title">Paramètres</div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Images en parallèle</label>
+          <select id="concurrency" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px">
+            <option value="3">3 à la fois (recommandé)</option>
+            <option value="5">5 à la fois</option>
+            <option value="10">10 à la fois (rapide)</option>
+            <option value="1">1 à la fois (lent)</option>
+          </select>
+          <div class="concurrency-info">Plus = plus rapide mais plus de coût simultané</div>
+        </div>
+        <div>
+          <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Intensité du changement</label>
+          <input type="range" id="strength" min="0.3" max="0.8" step="0.05" value="0.6" style="width:100%"/>
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:#888">
+            <span>Conservateur</span>
+            <span id="strengthVal">0.60</span>
+            <span>Agressif</span>
+          </div>
+        </div>
+      </div>
+ 
       <div class="panel">
         <div class="panel-title">Actions</div>
         <button class="btn" style="width:100%;margin-bottom:6px" onclick="selectAll()">Tout sélectionner</button>
@@ -90,10 +111,10 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
       <div class="panel" style="margin-bottom:14px">
         <div class="panel-title">Vos vestes</div>
         <div class="jacket-drop" id="jacketDrop">
-          <input type="file" accept="image/*" multiple id="jacketInput" onchange="loadJackets(this.files)"/>
+          <input type="file" accept="image/*" multiple onchange="loadJackets(this.files)"/>
           <div style="font-size:26px;margin-bottom:8px">👔</div>
           <strong style="font-size:13px">Glissez vos photos ici</strong><br>
-          <span style="font-size:12px;color:#888">ou cliquez pour sélectionner (JPG, PNG — autant que vous voulez)</span>
+          <span style="font-size:12px;color:#888">ou cliquez pour sélectionner (JPG, PNG — 40+ photos supportées)</span>
         </div>
         <div id="jacketCount" style="font-size:12px;color:#2563eb;font-weight:500;margin-bottom:10px"></div>
         <div class="jgrid" id="jgrid"></div>
@@ -116,10 +137,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 </div>
  
 <script>
+const PROXY = 'https://lingering-bonus-81c4.r552fmfpkh.workers.dev';
+const MODEL_VERSION = '7762fd07cf82c948538e41f4d4ebecd671861e7042a35f4aaa2f0eb9d0efa249';
+ 
 let jackets = [];
 let fabricB64 = null;
  
-// ── FABRIC ──────────────────────────────────────────
+document.getElementById('strength').addEventListener('input', function() {
+  document.getElementById('strengthVal').textContent = parseFloat(this.value).toFixed(2);
+});
+ 
 function loadFabric(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -134,7 +161,6 @@ function loadFabric(file) {
   reader.readAsDataURL(file);
 }
  
-// ── JACKETS ─────────────────────────────────────────
 function loadJackets(files) {
   Array.from(files).forEach(file => {
     const reader = new FileReader();
@@ -168,16 +194,19 @@ function removeJ(i) { jackets.splice(i, 1); renderJackets(); }
 function clearJackets() { jackets = []; renderJackets(); document.getElementById('jacketCount').textContent = ''; }
 function updateBtn() { document.getElementById('gbtn').disabled = !fabricB64 || jackets.filter(j=>j.sel).length === 0; }
  
-// ── DRAG & DROP ──────────────────────────────────────
-document.getElementById('jacketDrop').addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('over'); });
-document.getElementById('jacketDrop').addEventListener('dragleave', e => e.currentTarget.classList.remove('over'));
-document.getElementById('jacketDrop').addEventListener('drop', e => { e.preventDefault(); e.currentTarget.classList.remove('over'); loadJackets(e.dataTransfer.files); });
-document.getElementById('fabricDrop').addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('over'); });
-document.getElementById('fabricDrop').addEventListener('dragleave', e => e.currentTarget.classList.remove('over'));
-document.getElementById('fabricDrop').addEventListener('drop', e => { e.preventDefault(); e.currentTarget.classList.remove('over'); loadFabric(e.dataTransfer.files[0]); });
+// Drag & Drop
+['jacketDrop','fabricDrop'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('over'));
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('over');
+    if (id === 'fabricDrop') loadFabric(e.dataTransfer.files[0]);
+    else loadJackets(e.dataTransfer.files);
+  });
+});
  
-// ── RESIZE ───────────────────────────────────────────
-async function resize(dataUrl, maxW, quality) {
+async function resize(dataUrl, maxW) {
   return new Promise(res => {
     const img = new Image();
     img.onload = () => {
@@ -185,46 +214,50 @@ async function resize(dataUrl, maxW, quality) {
       const c = document.createElement('canvas');
       c.width = w; c.height = Math.round(img.naturalHeight * w / img.naturalWidth);
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      res(c.toDataURL('image/jpeg', quality).split(',')[1]);
+      res(c.toDataURL('image/jpeg', 0.88).split(',')[1]);
     };
     img.src = dataUrl;
   });
 }
  
-// ── REPLICATE ────────────────────────────────────────
-async function runPrediction(jacketB64, fabB64, key) {
-  // Use SDXL img2img via Replicate — send image as base64 data URI
+async function runPrediction(jacketB64, strength) {
   const body = {
-    version: "ac732df83cea7fff18b8472768c88ad041fa750ed7461c7ede723d0b49491bdf",
+    version: MODEL_VERSION,
     input: {
-      prompt: "suit jacket on white mannequin, fabric texture changed to match fabric swatch, same jacket shape silhouette lapels pockets buttons, white background, photorealistic product photography, studio lighting",
-      image: "data:image/jpeg;base64," + jacketB64,
-      prompt_strength: 0.55,
+      prompt: 'suit jacket on white mannequin, fabric changed to match the swatch texture and color, preserve jacket silhouette shape lapels pockets buttons, white background, photorealistic product photography, studio lighting',
+      negative_prompt: 'deformed, ugly, bad quality, blurry, distorted',
+      image: 'data:image/jpeg;base64,' + jacketB64,
+      prompt_strength: strength,
       num_inference_steps: 30,
       guidance_scale: 7.5,
-      num_outputs: 1
+      num_outputs: 1,
+      scheduler: 'DPMSolverMultistep'
     }
   };
-  const r = await fetch('https://lingering-bonus-81c4.r552fmfpkh.workers.dev/v1/predictions', {
+ 
+  const r = await fetch(PROXY + '/v1/predictions', {
     method: 'POST',
-    headers: { 'Authorization': 'Token ' + key, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
-  if (!r.ok) { const e = await r.json(); throw new Error(e.detail || JSON.stringify(e)); }
+ 
+  if (!r.ok) {
+    const e = await r.json();
+    throw new Error(e.detail || JSON.stringify(e));
+  }
   const pred = await r.json();
  
   // Poll
   for (let i = 0; i < 90; i++) {
-    await new Promise(r => setTimeout(r, 2000));
-    const p = await fetch('https://lingering-bonus-81c4.r552fmfpkh.workers.dev/v1/predictions/' + pred.id, { headers: { 'Authorization': 'Token ' + key } });
+    await new Promise(r => setTimeout(r, 2500));
+    const p = await fetch(PROXY + '/v1/predictions/' + pred.id);
     const d = await p.json();
     if (d.status === 'succeeded') return d.output?.[0];
     if (d.status === 'failed') throw new Error(d.error || 'Génération échouée');
   }
-  throw new Error('Timeout — réessayez');
+  throw new Error('Timeout');
 }
  
-// ── RESULT CARDS ─────────────────────────────────────
 function setCard(id, name, state, url, err) {
   const rg = document.getElementById('rgrid');
   rg.style.display = 'grid';
@@ -232,53 +265,68 @@ function setCard(id, name, state, url, err) {
   let el = document.getElementById('rc' + id);
   if (!el) { el = document.createElement('div'); el.className = 'rcard'; el.id = 'rc' + id; rg.appendChild(el); }
   if (state === 'loading') {
-    el.innerHTML = `<div class="loading-box"><div class="spin"></div></div><div class="rinfo"><div class="rname">${name}</div><div style="font-size:10px;color:#888;margin-top:2px">Génération en cours...</div></div>`;
+    el.innerHTML = `<div class="loading-box"><div class="spin"></div><div style="font-size:11px;color:#888">${name}</div></div>`;
   } else if (state === 'done') {
-    el.innerHTML = `<div class="rtop"><img src="${url}"/><span class="rbadge">Nouveau tissu</span></div><div class="rinfo"><div class="rname">${name}</div><a href="${url}" target="_blank" download="${name}_nouveau_tissu.jpg">Télécharger</a></div>`;
+    el.innerHTML = `<div class="rtop"><img src="${url}"/><span class="rbadge">Nouveau tissu</span></div><div class="rinfo"><div class="rname">${name}</div><a href="${url}" target="_blank">Voir · Télécharger</a></div>`;
   } else {
-    el.innerHTML = `<div class="rerr">❌ ${err}</div><div class="rinfo"><div class="rname">${name}</div></div>`;
+    el.innerHTML = `<div style="min-height:80px;background:#fef2f2;display:flex;align-items:center;padding:10px"><span class="rerr">❌ ${err}</span></div><div class="rinfo"><div class="rname">${name}</div></div>`;
   }
 }
  
-// ── MAIN ─────────────────────────────────────────────
+// Process queue with concurrency limit
+async function processQueue(tasks, concurrency) {
+  const results = [];
+  let idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      const i = idx++;
+      results[i] = await tasks[i]();
+    }
+  }
+  const workers = Array.from({length: concurrency}, worker);
+  await Promise.all(workers);
+  return results;
+}
+ 
 async function runAll() {
-  const key = document.getElementById('apikey').value.trim();
-  if (!key) { alert('Entrez votre clé API Replicate'); return; }
   if (!fabricB64) { alert('Uploadez un échantillon de tissu'); return; }
   const toProcess = jackets.filter(j => j.sel);
   if (!toProcess.length) { alert('Sélectionnez au moins une veste'); return; }
  
   const btn = document.getElementById('gbtn');
+  const concurrency = parseInt(document.getElementById('concurrency').value);
+  const strength = parseFloat(document.getElementById('strength').value);
+ 
   btn.disabled = true; btn.textContent = '⏳ Génération...';
-  document.getElementById('pb').style.width = '0';
   document.getElementById('rgrid').innerHTML = '';
   document.getElementById('rgrid').style.display = 'none';
   document.getElementById('emptyMsg').style.display = 'block';
+  document.getElementById('pb').style.width = '0';
  
   const st = document.getElementById('stxt');
   st.textContent = 'Préparation...';
  
-  // Pre-resize fabric
-  const fabSmall = await resize(fabricB64, 512, 0.9);
- 
+  const fabSmall = await resize(fabricB64, 512);
   let done = 0;
+ 
   toProcess.forEach(j => setCard(j.id, j.name, 'loading'));
  
-  await Promise.all(toProcess.map(async j => {
+  const tasks = toProcess.map(j => async () => {
     try {
-      st.textContent = `Traitement "${j.name}"...`;
-      const jSmall = await resize(j.b64, 768, 0.9);
-      const url = await runPrediction(jSmall, fabSmall, key);
+      const jSmall = await resize(j.b64, 768);
+      const url = await runPrediction(jSmall, strength);
       setCard(j.id, j.name, 'done', url, null);
     } catch(e) {
       setCard(j.id, j.name, 'error', null, e.message);
     }
     done++;
     document.getElementById('pb').style.width = Math.round(done / toProcess.length * 100) + '%';
-    st.textContent = done + '/' + toProcess.length + ' veste(s) traitée(s)';
-  }));
+    st.textContent = `✅ ${done}/${toProcess.length} veste(s) traitée(s) — ${toProcess.length - done} restante(s)`;
+  });
  
-  st.textContent = '✅ Terminé — ' + done + ' veste(s) générée(s)';
+  await processQueue(tasks, concurrency);
+ 
+  st.textContent = `🎉 Terminé — ${done} veste(s) générée(s)`;
   btn.disabled = false; btn.textContent = '⚡ Générer les images';
 }
 </script>
