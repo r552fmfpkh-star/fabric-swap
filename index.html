@@ -223,18 +223,17 @@ async function resize(dataUrl,maxW){
   });
 }
 
-async function predict(jB64,strength){
-  const colorDesc=fabAnalysis||'the fabric swatch color and texture';
+async function predict(jB64, fabB64, strength){
+  // Use fofr/style-transfer: content_image (jacket) + style_image (fabric swatch)
   const body={
-    version:VER,
+    version:'b2aa36f56d6f7a34009c387a2a27bca7f74d38e43c54a4d6f9b5d7cb8cc7ab4e',
     input:{
-      prompt:`professional suit jacket on white tailor mannequin, fabric completely changed to ${colorDesc}, same jacket silhouette cut lapels pockets buttons unchanged, pure white background, high-end fashion product photography, studio lighting, 8k photorealistic`,
-      negative_prompt:'deformed, ugly, blurry, distorted, wrinkled, dirty, watermark, text, logo',
-      image:'data:image/jpeg;base64,'+jB64,
-      prompt_strength:strength,
-      num_inference_steps:40,
-      guidance_scale:9,
-      num_outputs:1
+      content_image:'data:image/jpeg;base64,'+jB64,
+      style_image:'data:image/jpeg;base64,'+fabB64,
+      style_strength:strength,
+      content_strength: 1.0 - strength * 0.3,
+      output_quality:90,
+      seed:42
     }
   };
   const r=await fetch(PROXY+'/v1/predictions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -244,7 +243,7 @@ async function predict(jB64,strength){
     await new Promise(r=>setTimeout(r,2500));
     const p=await fetch(PROXY+'/v1/predictions/'+pred.id);
     const d=await p.json();
-    if(d.status==='succeeded')return d.output?.[0];
+    if(d.status==='succeeded')return d.output?.[0]||d.output;
     if(d.status==='failed')throw new Error(d.error||'Échec');
   }
   throw new Error('Timeout');
@@ -291,7 +290,7 @@ async function run(){
   const tasks=toProcess.map(j=>async()=>{
     try{
       const jS=await resize(j.b64,768);
-      const url=await predict(jS,str);
+      const url=await predict(jS,fabS,str);
       setCard(j.id,j.name,'done',url,null);
     }catch(e){
       setCard(j.id,j.name,'error',null,e.message);
