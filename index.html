@@ -320,29 +320,42 @@ async function applyFabricToJacket(jacketB64,fabB64,strength){
   // Create mask
   const mask=createMask(jCanvas);
   
-  // Apply LAB transfer
+  // Get jacket LAB stats for normalization
+  let jSumL=0,jSumA=0,jSumB=0,jN=0;
+  for(let i=0;i<w*h;i++){
+    if(mask[i]<0.5)continue;
+    const[L,A,B3]=rgb2lab(pixels[i*4],pixels[i*4+1],pixels[i*4+2]);
+    jSumL+=L;jSumA+=A;jSumB+=B3;jN++;
+  }
+  const jMeanL=jSumL/jN, jMeanA=jSumA/jN, jMeanB=jSumB/jN;
+
+  // Get fabric LAB stats
+  let fSumL=0,fSumA=0,fSumB=0,fN=0;
+  for(let i=0;i<fw*fh;i++){
+    const[L,A,B3]=rgb2lab(fData[i*4],fData[i*4+1],fData[i*4+2]);
+    fSumL+=L;fSumA+=A;fSumB+=B3;fN++;
+  }
+  const fMeanL=fSumL/fN, fMeanA=fSumA/fN, fMeanB=fSumB/fN;
+
+  // Apply Reinhard color transfer: shift LAB stats from jacket to fabric
   for(let i=0;i<w*h;i++){
     const m=mask[i];
     if(m<0.01)continue;
-    
     const pi=i*4;
     const r=pixels[pi],g=pixels[pi+1],b=pixels[pi+2];
     const[L,A,B3]=rgb2lab(r,g,b);
     
-    // Get fabric texture at this pixel (tiled)
-    const fx=(i%w)%fw;
-    const fy=Math.floor(i/w)%fh;
-    const fi=(fy*fw+fx)*4;
-    const[fTexL,fTexA,fTexB]=rgb2lab(fData[fi],fData[fi+1],fData[fi+2]);
+    // Reinhard transfer: map jacket LAB space to fabric LAB space
+    const newL=fMeanL+(L-jMeanL)*(strength>0.7?0.9:1.0);
+    const newA=fMeanA+(A-jMeanA)*0.5;
+    const newB=fMeanB+(B3-jMeanB)*0.5;
     
-    // Transfer luminosity + chrominance from fabric
-    // Mix jacket L with fabric L to show fabric lightness
-    const targetL=fTexL+(fabL-fTexL)*0; // use fabric texture L
-    const newL=L*(1-strength*0.7)+targetL*(strength*0.7);
-    const newA=A*(1-strength)+fabA*strength;
-    const newB=B3*(1-strength)+fabB2*strength;
+    // Mix with original based on strength
+    const mixL=L*(1-strength)+newL*strength;
+    const mixA=A*(1-strength)+newA*strength;
+    const mixB=B3*(1-strength)+newB*strength;
     
-    const[nr,ng,nb]=lab2rgb(newL,newA,newB);
+    const[nr,ng,nb]=lab2rgb(mixL,mixA,mixB);
     pixels[pi]=Math.round(r*(1-m)+nr*m);
     pixels[pi+1]=Math.round(g*(1-m)+ng*m);
     pixels[pi+2]=Math.round(b*(1-m)+nb*m);
