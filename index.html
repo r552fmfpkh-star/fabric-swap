@@ -316,8 +316,8 @@ async function processJacket(jacketB64,fabColor){
   const maskUrl=await createJacketMask(jacketB64);
 
   // Step 2: Inpainting with fabric texture
-  const prompt=`${fabColor} fabric texture on suit jacket, photorealistic, high quality fashion product photography, white background, studio lighting, same jacket silhouette`;
-  const negPrompt='deformed, ugly, blurry, distorted, bad quality, wrinkled, dirty';
+  const prompt=`suit jacket made of ${fabColor}, same exact jacket cut shape lapels pockets buttons, tailor mannequin, white background, fashion product photo, photorealistic`;
+  const negPrompt='person, face, shirt, tie, different jacket, bad quality, blurry, distorted, deformed';
 
   const resultUrl=await callReplicate(INPAINT_VER,{
     image:'data:image/jpeg;base64,'+jacketB64,
@@ -325,8 +325,8 @@ async function processJacket(jacketB64,fabColor){
     prompt:prompt,
     negative_prompt:negPrompt,
     num_inference_steps:50,
-    guidance_scale:9,
-    strength:0.85
+    guidance_scale:8,
+    strength:0.6
   });
 
   return resultUrl;
