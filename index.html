@@ -335,8 +335,10 @@ async function applyFabricToJacket(jacketB64,fabB64,strength){
     const fi=(fy*fw+fx)*4;
     const[fTexL,fTexA,fTexB]=rgb2lab(fData[fi],fData[fi+1],fData[fi+2]);
     
-    // Keep jacket luminosity (L), apply fabric chrominance (A,B) + texture detail
-    const newL=L+(fTexL-fabL)*0.15; // subtle texture in luminosity
+    // Transfer luminosity + chrominance from fabric
+    // Mix jacket L with fabric L to show fabric lightness
+    const targetL=fTexL+(fabL-fTexL)*0; // use fabric texture L
+    const newL=L*(1-strength*0.7)+targetL*(strength*0.7);
     const newA=A*(1-strength)+fabA*strength;
     const newB=B3*(1-strength)+fabB2*strength;
     
