@@ -55,25 +55,24 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .lbox{height:160px;background:#f9f9f9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
 .empty{text-align:center;padding:40px;color:#bbb;font-size:13px;border:1px dashed #ddd;border-radius:12px}
 select{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:8px}
-input[type=range]{width:100%}
-.hint{font-size:10px;color:#aaa;margin-top:3px;line-height:1.4}
 .steps{font-size:11px;color:#555;background:#f0f4ff;border-radius:8px;padding:8px 10px;line-height:1.8}
+.hint{font-size:10px;color:#aaa;margin-top:4px;line-height:1.4}
 </style>
 </head>
 <body>
 <div class="app">
 <h1>Changeur de tissu</h1>
-<p class="sub">Uploadez vos vestes + votre échantillon — application automatique du tissu</p>
+<p class="sub">Uploadez vos vestes + votre échantillon — génération automatique</p>
 <div class="panels">
 <div class="left">
   <div class="panel">
-    <div class="pt">Statut</div>
+    <div class="pt">Processus</div>
     <div class="steps">
-      1. Détourage automatique de la veste<br>
-      2. Application LAB du tissu<br>
-      3. Fusion avec ombres originales
+      1. Détourage auto de la veste<br>
+      2. Création du masque<br>
+      3. Inpainting avec le tissu
     </div>
-    <div class="hint" style="margin-top:8px">Traitement 100% local — aucune IA externe requise</div>
+    <div class="hint">Utilise Replicate pour un résultat photo-réaliste</div>
   </div>
 
   <div class="panel">
@@ -90,16 +89,10 @@ input[type=range]{width:100%}
     <div class="pt">Paramètres</div>
     <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Images en parallèle</label>
     <select id="conc">
-      <option value="4">4 à la fois</option>
-      <option value="8">8 à la fois</option>
+      <option value="3">3 à la fois</option>
+      <option value="5">5 à la fois</option>
       <option value="1">1 à la fois</option>
     </select>
-    <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Intensité du tissu</label>
-    <input type="range" id="str" min="0.3" max="1.0" step="0.05" value="0.85"/>
-    <div style="display:flex;justify-content:space-between;font-size:10px;color:#888">
-      <span>Subtil</span><span id="strV">0.85</span><span>Complet</span>
-    </div>
-    <div class="hint">0.85 = tissu visible, ombres préservées</div>
   </div>
 
   <div class="panel">
@@ -135,11 +128,13 @@ input[type=range]{width:100%}
 </div>
 
 <script>
-let jackets=[], fabB64=null;
+const PROXY='https://lingering-bonus-81c4.r552fmfpkh.workers.dev';
+// rembg - background removal to create mask
+const REMBG_VER='fb8af171cfa1616ddcf1242c093f9c46bcada5ad23d1f5a4930d4c0f0b27218';
+// stable-diffusion-inpainting
+const INPAINT_VER='95b7223104132402a9ae91cc677285bc5eb997834bd2349fa486f53910fd68b3';
 
-document.getElementById('str').oninput=function(){
-  document.getElementById('strV').textContent=parseFloat(this.value).toFixed(2);
-};
+let jackets=[],fabB64=null;
 
 ['fDrop','jDrop'].forEach(id=>{
   const el=document.getElementById(id);
@@ -198,28 +193,40 @@ function delJ(i){jackets.splice(i,1);renderJ();}
 function clearAll(){jackets=[];renderJ();document.getElementById('jCnt').textContent='';}
 function updateBtn(){document.getElementById('goBtn').disabled=!fabB64||jackets.filter(j=>j.sel).length===0;}
 
-// ── IMAGE PROCESSING (Canvas-based LAB color transfer) ──────────────────────
-
-function loadImage(src){
-  return new Promise((res,rej)=>{
+async function resize(dataUrl,maxW){
+  return new Promise(res=>{
     const img=new Image();
-    img.onload=()=>res(img);
-    img.onerror=rej;
-    img.src=src;
+    img.onload=()=>{
+      const w=Math.min(img.naturalWidth,maxW);
+      const c=document.createElement('canvas');
+      c.width=w;c.height=Math.round(img.naturalHeight*w/img.naturalWidth);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      res(c.toDataURL('image/jpeg',0.9).split(',')[1]);
+    };
+    img.src=dataUrl;
   });
 }
 
-function imgToCanvas(img,maxW=1024){
-  const scale=Math.min(1,maxW/img.naturalWidth);
-  const w=Math.round(img.naturalWidth*scale);
-  const h=Math.round(img.naturalHeight*scale);
-  const c=document.createElement('canvas');
-  c.width=w;c.height=h;
-  c.getContext('2d').drawImage(img,0,0,w,h);
-  return c;
+async function callReplicate(version,input){
+  const r=await fetch(PROXY+'/v1/predictions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({version,input})
+  });
+  if(!r.ok){const e=await r.json();throw new Error(e.detail||JSON.stringify(e));}
+  const pred=await r.json();
+  // Poll
+  for(let i=0;i<90;i++){
+    await new Promise(r=>setTimeout(r,2500));
+    const p=await fetch(PROXY+'/v1/predictions/'+pred.id);
+    const d=await p.json();
+    if(d.status==='succeeded')return Array.isArray(d.output)?d.output[0]:d.output;
+    if(d.status==='failed')throw new Error(d.error||'Échec');
+  }
+  throw new Error('Timeout');
 }
 
-// RGB -> LAB conversion
+// Analyze fabric color for prompt
 function rgb2lab(r,g,b){
   r/=255;g/=255;b/=255;
   r=r>0.04045?Math.pow((r+0.055)/1.055,2.4):r/12.92;
@@ -228,146 +235,77 @@ function rgb2lab(r,g,b){
   let x=r*0.4124+g*0.3576+b*0.1805;
   let y=r*0.2126+g*0.7152+b*0.0722;
   let z=r*0.0193+g*0.1192+b*0.9505;
-  x/=0.95047;y/=1.00000;z/=1.08883;
+  x/=0.95047;y/=1;z/=1.08883;
   x=x>0.008856?Math.pow(x,1/3):7.787*x+16/116;
   y=y>0.008856?Math.pow(y,1/3):7.787*y+16/116;
   z=z>0.008856?Math.pow(z,1/3):7.787*z+16/116;
   return[116*y-16,500*(x-y),200*(y-z)];
 }
 
-// LAB -> RGB conversion
-function lab2rgb(L,a,b){
-  let y=(L+16)/116,x=a/500+y,z=y-b/200;
-  x=x*x*x>0.008856?x*x*x:(x-16/116)/7.787;
-  y=y*y*y>0.008856?y*y*y:(y-16/116)/7.787;
-  z=z*z*z>0.008856?z*z*z:(z-16/116)/7.787;
-  x*=0.95047;y*=1.00000;z*=1.08883;
-  let r=x*3.2406+y*(-1.5372)+z*(-0.4986);
-  let g=x*(-0.9689)+y*1.8758+z*0.0415;
-  let bl=x*0.0557+y*(-0.2040)+z*1.0570;
-  r=r>0.0031308?1.055*Math.pow(r,1/2.4)-0.055:12.92*r;
-  g=g>0.0031308?1.055*Math.pow(g,1/2.4)-0.055:12.92*g;
-  bl=bl>0.0031308?1.055*Math.pow(bl,1/2.4)-0.055:12.92*bl;
-  return[Math.round(Math.max(0,Math.min(255,r*255))),Math.round(Math.max(0,Math.min(255,g*255))),Math.round(Math.max(0,Math.min(255,bl*255)))];
+async function getFabricDesc(dataUrl){
+  return new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      const c=document.createElement('canvas');
+      c.width=50;c.height=50;
+      const ctx=c.getContext('2d');
+      ctx.drawImage(img,0,0,50,50);
+      const d=ctx.getImageData(0,0,50,50).data;
+      let r=0,g=0,b=0,n=0;
+      for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];n++;}
+      r=Math.round(r/n);g=Math.round(g/n);b=Math.round(b/n);
+      const bright=(r+g+b)/3;
+      const maxC=Math.max(r,g,b),minC=Math.min(r,g,b);
+      const sat=maxC===0?0:(maxC-minC)/maxC;
+      let color='';
+      if(bright<60)color='very dark charcoal black wool';
+      else if(r<90&&g<90&&b>110)color='dark navy blue wool twill';
+      else if(r>150&&g>130&&b<110&&sat>0.1)color='warm beige camel wool herringbone';
+      else if(sat<0.08&&bright<130)color='medium charcoal grey flannel';
+      else if(sat<0.08&&bright<180)color='light grey wool';
+      else if(r>170&&g>160&&b>140&&sat<0.1)color='light cream ivory wool';
+      else if(r>130&&g<90&&b<90)color='burgundy wine red wool';
+      else if(r<90&&g>100&&b<90)color='forest green wool';
+      else if(r>150&&g>100&&b<70)color='camel brown wool';
+      else color=`rgb(${r},${g},${b}) colored wool fabric`;
+      res(color);
+    };
+    img.src=dataUrl;
+  });
 }
 
-// Get mean LAB values from fabric swatch
-function getFabricLAB(fabCanvas){
-  const ctx=fabCanvas.getContext('2d');
-  const data=ctx.getImageData(0,0,fabCanvas.width,fabCanvas.height).data;
-  let sumL=0,sumA=0,sumB=0,n=0;
-  for(let i=0;i<data.length;i+=4){
-    const [L,a,b]=rgb2lab(data[i],data[i+1],data[i+2]);
-    sumL+=L;sumA+=a;sumB+=b;n++;
-  }
-  return[sumL/n,sumA/n,sumB/n];
+// Create white mask from jacket (white=jacket area, black=background)
+async function createJacketMask(jacketB64){
+  // Use rembg to remove background, giving us the jacket silhouette
+  const maskUrl=await callReplicate(REMBG_VER,{
+    image:'data:image/jpeg;base64,'+jacketB64,
+    return_mask:true
+  });
+  return maskUrl;
 }
 
-// Create jacket mask: detect non-white pixels (the jacket)
-function createMask(jacketCanvas){
-  const {width:w,height:h}=jacketCanvas;
-  const ctx=jacketCanvas.getContext('2d');
-  const data=ctx.getImageData(0,0,w,h).data;
-  const mask=new Float32Array(w*h);
-  for(let i=0;i<w*h;i++){
-    const r=data[i*4],g=data[i*4+1],b=data[i*4+2];
-    // White background detection
-    const isWhite=r>230&&g>230&&b>230;
-    mask[i]=isWhite?0:1;
-  }
-  // Blur the mask for smooth edges
-  return blurMask(mask,w,h,3);
+async function processJacket(jacketB64,fabColor){
+  // Step 1: Get jacket mask via rembg
+  const maskUrl=await createJacketMask(jacketB64);
+
+  // Step 2: Inpainting with fabric texture
+  const prompt=`${fabColor} fabric texture on suit jacket, photorealistic, high quality fashion product photography, white background, studio lighting, same jacket silhouette`;
+  const negPrompt='deformed, ugly, blurry, distorted, bad quality, wrinkled, dirty';
+
+  const resultUrl=await callReplicate(INPAINT_VER,{
+    image:'data:image/jpeg;base64,'+jacketB64,
+    mask:maskUrl,
+    prompt:prompt,
+    negative_prompt:negPrompt,
+    num_inference_steps:50,
+    guidance_scale:9,
+    strength:0.85
+  });
+
+  return resultUrl;
 }
 
-function blurMask(mask,w,h,radius){
-  const out=new Float32Array(w*h);
-  const size=radius*2+1;
-  for(let y=0;y<h;y++){
-    for(let x=0;x<w;x++){
-      let sum=0,cnt=0;
-      for(let dy=-radius;dy<=radius;dy++){
-        for(let dx=-radius;dx<=radius;dx++){
-          const ny=y+dy,nx=x+dx;
-          if(ny>=0&&ny<h&&nx>=0&&nx<w){sum+=mask[ny*w+nx];cnt++;}
-        }
-      }
-      out[y*w+x]=sum/cnt;
-    }
-  }
-  return out;
-}
-
-// Apply fabric LAB to jacket using mask
-async function applyFabricToJacket(jacketB64,fabB64,strength){
-  const [jImg,fImg]=await Promise.all([loadImage(jacketB64),loadImage(fabB64)]);
-  
-  const jCanvas=imgToCanvas(jImg,1024);
-  const fCanvas=imgToCanvas(fImg,256);
-  
-  const w=jCanvas.width,h=jCanvas.height;
-  const jCtx=jCanvas.getContext('2d');
-  const jData=jCtx.getImageData(0,0,w,h);
-  const pixels=jData.data;
-  
-  // Get fabric average LAB
-  const[fabL,fabA,fabB2]=getFabricLAB(fCanvas);
-  
-  // Get fabric texture data (tiled)
-  const fCtx=fCanvas.getContext('2d');
-  const fData=fCtx.getImageData(0,0,fCanvas.width,fCanvas.height).data;
-  const fw=fCanvas.width,fh=fCanvas.height;
-  
-  // Create mask
-  const mask=createMask(jCanvas);
-  
-  // Get jacket LAB stats for normalization
-  let jSumL=0,jSumA=0,jSumB=0,jN=0;
-  for(let i=0;i<w*h;i++){
-    if(mask[i]<0.5)continue;
-    const[L,A,B3]=rgb2lab(pixels[i*4],pixels[i*4+1],pixels[i*4+2]);
-    jSumL+=L;jSumA+=A;jSumB+=B3;jN++;
-  }
-  const jMeanL=jSumL/jN, jMeanA=jSumA/jN, jMeanB=jSumB/jN;
-
-  // Get fabric LAB stats
-  let fSumL=0,fSumA=0,fSumB=0,fN=0;
-  for(let i=0;i<fw*fh;i++){
-    const[L,A,B3]=rgb2lab(fData[i*4],fData[i*4+1],fData[i*4+2]);
-    fSumL+=L;fSumA+=A;fSumB+=B3;fN++;
-  }
-  const fMeanL=fSumL/fN, fMeanA=fSumA/fN, fMeanB=fSumB/fN;
-
-  // Apply Reinhard color transfer: shift LAB stats from jacket to fabric
-  for(let i=0;i<w*h;i++){
-    const m=mask[i];
-    if(m<0.01)continue;
-    const pi=i*4;
-    const r=pixels[pi],g=pixels[pi+1],b=pixels[pi+2];
-    const[L,A,B3]=rgb2lab(r,g,b);
-    
-    // Reinhard transfer: map jacket LAB space to fabric LAB space
-    const newL=fMeanL+(L-jMeanL)*(strength>0.7?0.9:1.0);
-    const newA=fMeanA+(A-jMeanA)*0.5;
-    const newB=fMeanB+(B3-jMeanB)*0.5;
-    
-    // Mix with original based on strength
-    const mixL=L*(1-strength)+newL*strength;
-    const mixA=A*(1-strength)+newA*strength;
-    const mixB=B3*(1-strength)+newB*strength;
-    
-    const[nr,ng,nb]=lab2rgb(mixL,mixA,mixB);
-    pixels[pi]=Math.round(r*(1-m)+nr*m);
-    pixels[pi+1]=Math.round(g*(1-m)+ng*m);
-    pixels[pi+2]=Math.round(b*(1-m)+nb*m);
-  }
-  
-  jCtx.putImageData(jData,0,0);
-  return jCanvas.toDataURL('image/jpeg',0.95);
-}
-
-// ── UI ──────────────────────────────────────────────────────────────────────
-
-function setCard(id,name,state,dataUrl,err){
+function setCard(id,name,state,url,err){
   const rg=document.getElementById('rGrid');
   rg.style.display='grid';
   document.getElementById('emp').style.display='none';
@@ -376,7 +314,7 @@ function setCard(id,name,state,dataUrl,err){
   if(state==='loading'){
     el.innerHTML=`<div class="lbox"><div class="spin"></div><div style="font-size:11px;color:#888">${name}</div></div>`;
   }else if(state==='done'){
-    el.innerHTML=`<div class="rt"><img src="${dataUrl}"/><span class="rb">Nouveau tissu</span></div><div class="ri"><div class="rn">${name}</div><a href="${dataUrl}" download="${name}_tissu.jpg">Télécharger</a></div>`;
+    el.innerHTML=`<div class="rt"><img src="${url}"/><span class="rb">Nouveau tissu</span></div><div class="ri"><div class="rn">${name}</div><a href="${url}" target="_blank">Télécharger</a></div>`;
   }else{
     el.innerHTML=`<div style="min-height:80px;background:#fef2f2;display:flex;align-items:center;padding:10px"><span class="rerr">❌ ${err}</span></div><div class="ri"><div class="rn">${name}</div></div>`;
   }
@@ -395,22 +333,25 @@ async function run(){
 
   const btn=document.getElementById('goBtn');
   const conc=parseInt(document.getElementById('conc').value);
-  const str=parseFloat(document.getElementById('str').value);
   btn.disabled=true;btn.textContent='⏳ Traitement...';
   document.getElementById('rGrid').innerHTML='';
   document.getElementById('rGrid').style.display='none';
   document.getElementById('emp').style.display='block';
   document.getElementById('pb').style.width='0';
   const st=document.getElementById('st');
-  st.textContent='Démarrage...';
+
+  // Analyze fabric
+  const fabColor=await getFabricDesc(fabB64);
+  st.textContent=`Tissu détecté: ${fabColor}`;
 
   let done=0;
   toProcess.forEach(j=>setCard(j.id,j.name,'loading'));
 
   const tasks=toProcess.map(j=>async()=>{
     try{
-      const result=await applyFabricToJacket(j.b64,fabB64,str);
-      setCard(j.id,j.name,'done',result,null);
+      const jResized=await resize(j.b64,768);
+      const url=await processJacket(jResized,fabColor);
+      setCard(j.id,j.name,'done',url,null);
     }catch(e){
       setCard(j.id,j.name,'error',null,e.message);
     }
@@ -420,7 +361,7 @@ async function run(){
   });
 
   await processQueue(tasks,conc);
-  st.textContent=`🎉 Terminé — ${done} veste(s) traitée(s)`;
+  st.textContent=`🎉 Terminé — ${done} veste(s) générée(s)`;
   btn.disabled=false;btn.textContent='⚡ Appliquer le tissu';
 }
 </script>
