@@ -55,26 +55,15 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .lbox{height:160px;background:#f9f9f9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
 .empty{text-align:center;padding:40px;color:#bbb;font-size:13px;border:1px dashed #ddd;border-radius:12px}
 select{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:8px}
-.steps{font-size:11px;color:#555;background:#f0f4ff;border-radius:8px;padding:8px 10px;line-height:1.8}
-.hint{font-size:10px;color:#aaa;margin-top:4px;line-height:1.4}
+.fab-color{font-size:11px;color:#16a34a;font-weight:500;margin-top:6px;min-height:16px}
 </style>
 </head>
 <body>
 <div class="app">
 <h1>Changeur de tissu</h1>
-<p class="sub">Uploadez vos vestes + votre échantillon — génération automatique</p>
+<p class="sub">Uploadez vos vestes + votre échantillon — génération via Replicate</p>
 <div class="panels">
 <div class="left">
-  <div class="panel">
-    <div class="pt">Processus</div>
-    <div class="steps">
-      1. Détourage auto de la veste<br>
-      2. Création du masque<br>
-      3. Inpainting avec le tissu
-    </div>
-    <div class="hint">Utilise Replicate pour un résultat photo-réaliste</div>
-  </div>
-
   <div class="panel">
     <div class="pt">Échantillon de tissu</div>
     <div class="drop fab-drop" id="fDrop">
@@ -83,6 +72,7 @@ select{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-s
       <div class="fab-ph" id="fPh"><div style="font-size:26px;margin-bottom:6px">🧵</div>Cliquez ou glissez<br>votre échantillon ici</div>
       <div id="fLbl" style="font-size:11px;color:#888;margin-top:4px"></div>
     </div>
+    <div class="fab-color" id="fabColor"></div>
   </div>
 
   <div class="panel">
@@ -117,7 +107,7 @@ select{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-s
   </div>
   <div class="acts">
     <span class="si" id="sInfo">0 veste(s) sélectionnée(s)</span>
-    <button class="bgo btn" id="goBtn" onclick="run()" disabled>⚡ Appliquer le tissu</button>
+    <button class="bgo btn" id="goBtn" onclick="run()" disabled>⚡ Générer les images</button>
   </div>
   <div class="prog"><div class="pb" id="pb"></div></div>
   <div class="st" id="st"></div>
@@ -129,12 +119,9 @@ select{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-s
 
 <script>
 const PROXY='https://lingering-bonus-81c4.r552fmfpkh.workers.dev';
-// rembg - background removal to create mask
-const REMBG_VER='4067ee2a58f6c161d434a9c077cfa012820b8e076efa2772aa171e26557da919';
-// stable-diffusion-inpainting
-const INPAINT_VER='95b7223104132402a9ae91cc677285bc5eb997834bd2349fa486f53910fd68b3';
+const VER='39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b';
 
-let jackets=[],fabB64=null;
+let jackets=[],fabB64=null,fabDesc='';
 
 ['fDrop','jDrop'].forEach(id=>{
   const el=document.getElementById(id);
@@ -156,9 +143,41 @@ function loadFab(file){
     document.getElementById('fImg').style.display='block';
     document.getElementById('fPh').style.display='none';
     document.getElementById('fLbl').textContent=file.name;
+    analyzeFabric(fabB64);
     updateBtn();
   };
   r.readAsDataURL(file);
+}
+
+function analyzeFabric(dataUrl){
+  const img=new Image();
+  img.onload=()=>{
+    const c=document.createElement('canvas');
+    c.width=50;c.height=50;
+    const ctx=c.getContext('2d');
+    ctx.drawImage(img,0,0,50,50);
+    const d=ctx.getImageData(0,0,50,50).data;
+    let r=0,g=0,b=0,n=0;
+    for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];n++;}
+    r=Math.round(r/n);g=Math.round(g/n);b=Math.round(b/n);
+    const br=(r+g+b)/3;
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+    const sat=mx===0?0:(mx-mn)/mx;
+    let color='';
+    if(br<60)color='very dark charcoal black wool fabric';
+    else if(r<90&&g<90&&b>110)color='dark navy blue twill wool fabric';
+    else if(r>150&&g>130&&b<110&&sat>0.08)color='warm beige camel herringbone wool fabric';
+    else if(sat<0.06&&br<130)color='medium charcoal grey flannel wool fabric';
+    else if(sat<0.06&&br<180)color='light grey wool fabric';
+    else if(r>170&&g>160&&b>140&&sat<0.08)color='light cream ivory wool fabric';
+    else if(r>130&&g<90&&b<90)color='burgundy wine red wool fabric';
+    else if(r<90&&g>100&&b<90)color='dark forest green wool fabric';
+    else if(r>150&&g>100&&b<70)color='camel brown wool fabric';
+    else color=`rgb(${r},${g},${b}) colored wool fabric`;
+    fabDesc=color;
+    document.getElementById('fabColor').textContent='Tissu détecté: '+color;
+  };
+  img.src=dataUrl;
 }
 
 function loadJ(files){
@@ -207,129 +226,39 @@ async function resize(dataUrl,maxW){
   });
 }
 
-async function callReplicate(version,input){
+async function generate(jacketB64,fabricDesc){
+  const prompt=`bespoke suit jacket on white tailor mannequin, fabric is ${fabricDesc}, precise fabric texture visible on jacket surface, identical jacket silhouette notch lapels patch pockets buttons, pure white background, high-end fashion product photography, 8k photorealistic studio lighting`;
+  const neg=`wrong color, bad fabric, deformed jacket, ugly, blurry, distorted, person, face, unicorn, animal, artwork, painting`;
+
+  const body={
+    version:VER,
+    input:{
+      prompt,
+      negative_prompt:neg,
+      image:'data:image/jpeg;base64,'+jacketB64,
+      prompt_strength:0.5,
+      num_inference_steps:40,
+      guidance_scale:10,
+      num_outputs:1
+    }
+  };
+
   const r=await fetch(PROXY+'/v1/predictions',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({version,input})
+    body:JSON.stringify(body)
   });
   if(!r.ok){const e=await r.json();throw new Error(e.detail||JSON.stringify(e));}
   const pred=await r.json();
-  // Poll
+
   for(let i=0;i<90;i++){
     await new Promise(r=>setTimeout(r,2500));
     const p=await fetch(PROXY+'/v1/predictions/'+pred.id);
     const d=await p.json();
     if(d.status==='succeeded')return Array.isArray(d.output)?d.output[0]:d.output;
-    if(d.status==='failed')throw new Error(d.error||'Échec');
+    if(d.status==='failed')throw new Error(d.error||'Génération échouée');
   }
   throw new Error('Timeout');
-}
-
-// Analyze fabric color for prompt
-function rgb2lab(r,g,b){
-  r/=255;g/=255;b/=255;
-  r=r>0.04045?Math.pow((r+0.055)/1.055,2.4):r/12.92;
-  g=g>0.04045?Math.pow((g+0.055)/1.055,2.4):g/12.92;
-  b=b>0.04045?Math.pow((b+0.055)/1.055,2.4):b/12.92;
-  let x=r*0.4124+g*0.3576+b*0.1805;
-  let y=r*0.2126+g*0.7152+b*0.0722;
-  let z=r*0.0193+g*0.1192+b*0.9505;
-  x/=0.95047;y/=1;z/=1.08883;
-  x=x>0.008856?Math.pow(x,1/3):7.787*x+16/116;
-  y=y>0.008856?Math.pow(y,1/3):7.787*y+16/116;
-  z=z>0.008856?Math.pow(z,1/3):7.787*z+16/116;
-  return[116*y-16,500*(x-y),200*(y-z)];
-}
-
-async function getFabricDesc(dataUrl){
-  return new Promise(res=>{
-    const img=new Image();
-    img.onload=()=>{
-      const c=document.createElement('canvas');
-      c.width=50;c.height=50;
-      const ctx=c.getContext('2d');
-      ctx.drawImage(img,0,0,50,50);
-      const d=ctx.getImageData(0,0,50,50).data;
-      let r=0,g=0,b=0,n=0;
-      for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];n++;}
-      r=Math.round(r/n);g=Math.round(g/n);b=Math.round(b/n);
-      const bright=(r+g+b)/3;
-      const maxC=Math.max(r,g,b),minC=Math.min(r,g,b);
-      const sat=maxC===0?0:(maxC-minC)/maxC;
-      let color='';
-      if(bright<60)color='very dark charcoal black wool';
-      else if(r<90&&g<90&&b>110)color='dark navy blue wool twill';
-      else if(r>150&&g>130&&b<110&&sat>0.1)color='warm beige camel wool herringbone';
-      else if(sat<0.08&&bright<130)color='medium charcoal grey flannel';
-      else if(sat<0.08&&bright<180)color='light grey wool';
-      else if(r>170&&g>160&&b>140&&sat<0.1)color='light cream ivory wool';
-      else if(r>130&&g<90&&b<90)color='burgundy wine red wool';
-      else if(r<90&&g>100&&b<90)color='forest green wool';
-      else if(r>150&&g>100&&b<70)color='camel brown wool';
-      else color=`rgb(${r},${g},${b}) colored wool fabric`;
-      res(color);
-    };
-    img.src=dataUrl;
-  });
-}
-
-// Create white mask from jacket (white=jacket area, black=background)
-async function createJacketMask(jacketB64){
-  // Use smoretalk/rembg-enhance to remove background
-  // Returns PNG with transparent background - we use alpha as mask
-  const resultUrl=await callReplicate(REMBG_VER,{
-    image:'data:image/jpeg;base64,'+jacketB64
-  });
-  
-  // Convert transparent PNG to white mask (white=jacket, black=background)
-  const maskB64=await convertAlphaToMask(resultUrl);
-  return maskB64;
-}
-
-async function convertAlphaToMask(imageUrl){
-  return new Promise((res,rej)=>{
-    const img=new Image();
-    img.crossOrigin='anonymous';
-    img.onload=()=>{
-      const c=document.createElement('canvas');
-      c.width=img.width;c.height=img.height;
-      const ctx=c.getContext('2d');
-      ctx.drawImage(img,0,0);
-      const d=ctx.getImageData(0,0,c.width,c.height);
-      // Convert alpha channel to black/white mask
-      for(let i=0;i<d.data.length;i+=4){
-        const alpha=d.data[i+3];
-        const v=alpha>128?255:0;
-        d.data[i]=v;d.data[i+1]=v;d.data[i+2]=v;d.data[i+3]=255;
-      }
-      ctx.putImageData(d,0,0);
-      res(c.toDataURL('image/png').split(',')[1]);
-    };
-    img.onerror=rej;
-    img.src=imageUrl;
-  });
-}
-
-async function processJacket(jacketB64,fabColor){
-  // Step 1: Get jacket mask via rembg
-  const maskUrl=await createJacketMask(jacketB64);
-
-  // Step 2: Inpainting with fabric texture
-  const prompt=`suit jacket made of ${fabColor}, same exact jacket cut shape lapels pockets buttons, tailor mannequin, white background, fashion product photo, photorealistic`;
-  const negPrompt='person, face, shirt, tie, different jacket, bad quality, blurry, distorted, deformed';
-
-  const resultUrl=await callReplicate(INPAINT_VER,{
-    image:'data:image/jpeg;base64,'+jacketB64,
-    mask:'data:image/png;base64,'+maskUrl,
-    prompt:prompt,
-    negative_prompt:negPrompt,
-    num_inference_steps:50,
-    guidance_scale:8,
-    strength:0.6
-  });
-
-  return resultUrl;
 }
 
 function setCard(id,name,state,url,err){
@@ -355,29 +284,27 @@ async function processQueue(tasks,conc){
 
 async function run(){
   if(!fabB64){alert('Uploadez un échantillon de tissu');return;}
+  if(!fabDesc){alert('Attendez la détection du tissu');return;}
   const toProcess=jackets.filter(j=>j.sel);
   if(!toProcess.length){alert('Sélectionnez au moins une veste');return;}
 
   const btn=document.getElementById('goBtn');
   const conc=parseInt(document.getElementById('conc').value);
-  btn.disabled=true;btn.textContent='⏳ Traitement...';
+  btn.disabled=true;btn.textContent='⏳ Génération...';
   document.getElementById('rGrid').innerHTML='';
   document.getElementById('rGrid').style.display='none';
   document.getElementById('emp').style.display='block';
   document.getElementById('pb').style.width='0';
   const st=document.getElementById('st');
-
-  // Analyze fabric
-  const fabColor=await getFabricDesc(fabB64);
-  st.textContent=`Tissu détecté: ${fabColor}`;
+  st.textContent=`Tissu: ${fabDesc}`;
 
   let done=0;
   toProcess.forEach(j=>setCard(j.id,j.name,'loading'));
 
   const tasks=toProcess.map(j=>async()=>{
     try{
-      const jResized=await resize(j.b64,768);
-      const url=await processJacket(jResized,fabColor);
+      const jSmall=await resize(j.b64,768);
+      const url=await generate(jSmall,fabDesc);
       setCard(j.id,j.name,'done',url,null);
     }catch(e){
       setCard(j.id,j.name,'error',null,e.message);
@@ -389,7 +316,7 @@ async function run(){
 
   await processQueue(tasks,conc);
   st.textContent=`🎉 Terminé — ${done} veste(s) générée(s)`;
-  btn.disabled=false;btn.textContent='⚡ Appliquer le tissu';
+  btn.disabled=false;btn.textContent='⚡ Générer les images';
 }
 </script>
 </body>
