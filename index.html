@@ -54,22 +54,26 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 @keyframes sp{to{transform:rotate(360deg)}}
 .lbox{height:160px;background:#f9f9f9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
 .empty{text-align:center;padding:40px;color:#bbb;font-size:13px;border:1px dashed #ddd;border-radius:12px}
-select,input[type=password]{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:8px}
+select{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:8px}
 input[type=range]{width:100%}
 .hint{font-size:10px;color:#aaa;margin-top:3px;line-height:1.4}
-.tag{display:inline-block;background:#f0f4ff;color:#2563eb;font-size:10px;padding:2px 6px;border-radius:4px;margin-top:4px}
+.steps{font-size:11px;color:#555;background:#f0f4ff;border-radius:8px;padding:8px 10px;line-height:1.8}
 </style>
 </head>
 <body>
 <div class="app">
 <h1>Changeur de tissu</h1>
-<p class="sub">Uploadez vos vestes + votre échantillon — génération automatique</p>
+<p class="sub">Uploadez vos vestes + votre échantillon — application automatique du tissu</p>
 <div class="panels">
 <div class="left">
   <div class="panel">
     <div class="pt">Statut</div>
-    <div style="font-size:11px;color:#16a34a;font-weight:500">✓ Prêt à générer</div>
-    <div class="hint" style="margin-top:6px">Les images sont envoyées directement à Replicate via le proxy sécurisé.</div>
+    <div class="steps">
+      1. Détourage automatique de la veste<br>
+      2. Application LAB du tissu<br>
+      3. Fusion avec ombres originales
+    </div>
+    <div class="hint" style="margin-top:8px">Traitement 100% local — aucune IA externe requise</div>
   </div>
 
   <div class="panel">
@@ -86,15 +90,16 @@ input[type=range]{width:100%}
     <div class="pt">Paramètres</div>
     <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Images en parallèle</label>
     <select id="conc">
-      <option value="3">3 à la fois</option>
-      <option value="5">5 à la fois</option>
+      <option value="4">4 à la fois</option>
+      <option value="8">8 à la fois</option>
       <option value="1">1 à la fois</option>
     </select>
-    <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Intensité du style</label>
-    <input type="range" id="str" min="0.3" max="1.0" step="0.05" value="0.7"/>
+    <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Intensité du tissu</label>
+    <input type="range" id="str" min="0.3" max="1.0" step="0.05" value="0.85"/>
     <div style="display:flex;justify-content:space-between;font-size:10px;color:#888">
-      <span>Subtil</span><span id="strV">0.70</span><span>Fort</span>
+      <span>Subtil</span><span id="strV">0.85</span><span>Complet</span>
     </div>
+    <div class="hint">0.85 = tissu visible, ombres préservées</div>
   </div>
 
   <div class="panel">
@@ -107,19 +112,19 @@ input[type=range]{width:100%}
 
 <div>
   <div class="panel" style="margin-bottom:14px">
-    <div class="pt">Vos vestes <span class="tag">40+ photos supportées</span></div>
+    <div class="pt">Vos vestes</div>
     <div class="drop jdrop" id="jDrop">
       <input type="file" accept="image/*" multiple onchange="loadJ(this.files)"/>
       <div style="font-size:26px;margin-bottom:8px">👔</div>
       <strong style="font-size:13px">Glissez vos photos ici</strong><br>
-      <span style="font-size:12px;color:#888">ou cliquez pour sélectionner</span>
+      <span style="font-size:12px;color:#888">ou cliquez pour sélectionner (40+ photos supportées)</span>
     </div>
     <div id="jCnt" style="font-size:12px;color:#2563eb;font-weight:500;margin-bottom:10px"></div>
     <div class="jgrid" id="jGrid"></div>
   </div>
   <div class="acts">
     <span class="si" id="sInfo">0 veste(s) sélectionnée(s)</span>
-    <button class="bgo btn" id="goBtn" onclick="run()" disabled>⚡ Générer les images</button>
+    <button class="bgo btn" id="goBtn" onclick="run()" disabled>⚡ Appliquer le tissu</button>
   </div>
   <div class="prog"><div class="pb" id="pb"></div></div>
   <div class="st" id="st"></div>
@@ -130,10 +135,7 @@ input[type=range]{width:100%}
 </div>
 
 <script>
-const PROXY='https://lingering-bonus-81c4.r552fmfpkh.workers.dev';
-const VER='f1023890703bc0a5a3a2c21b5e498833be5f6ef6e70e9daf6b9b3a4fd8309cf0';
-
-let jackets=[],fabB64=null,fabUrl=null;
+let jackets=[], fabB64=null;
 
 document.getElementById('str').oninput=function(){
   document.getElementById('strV').textContent=parseFloat(this.value).toFixed(2);
@@ -155,7 +157,6 @@ function loadFab(file){
   const r=new FileReader();
   r.onload=e=>{
     fabB64=e.target.result;
-    fabUrl=null;
     document.getElementById('fImg').src=fabB64;
     document.getElementById('fImg').style.display='block';
     document.getElementById('fPh').style.display='none';
@@ -169,7 +170,7 @@ function loadJ(files){
   Array.from(files).forEach(file=>{
     const r=new FileReader();
     r.onload=e=>{
-      jackets.push({id:Date.now()+Math.random(),name:file.name.replace(/\.[^.]+$/,''),b64:e.target.result,url:null,sel:true});
+      jackets.push({id:Date.now()+Math.random(),name:file.name.replace(/\.[^.]+$/,''),b64:e.target.result,sel:true});
       renderJ();
     };
     r.readAsDataURL(file);
@@ -197,50 +198,161 @@ function delJ(i){jackets.splice(i,1);renderJ();}
 function clearAll(){jackets=[];renderJ();document.getElementById('jCnt').textContent='';}
 function updateBtn(){document.getElementById('goBtn').disabled=!fabB64||jackets.filter(j=>j.sel).length===0;}
 
-async function resize(dataUrl,maxW){
-  return new Promise(res=>{
+// ── IMAGE PROCESSING (Canvas-based LAB color transfer) ──────────────────────
+
+function loadImage(src){
+  return new Promise((res,rej)=>{
     const img=new Image();
-    img.onload=()=>{
-      const w=Math.min(img.naturalWidth,maxW);
-      const c=document.createElement('canvas');
-      c.width=w;c.height=Math.round(img.naturalHeight*w/img.naturalWidth);
-      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-      res(c.toDataURL('image/jpeg',0.88));
-    };
-    img.src=dataUrl;
+    img.onload=()=>res(img);
+    img.onerror=rej;
+    img.src=src;
   });
 }
 
+function imgToCanvas(img,maxW=1024){
+  const scale=Math.min(1,maxW/img.naturalWidth);
+  const w=Math.round(img.naturalWidth*scale);
+  const h=Math.round(img.naturalHeight*scale);
+  const c=document.createElement('canvas');
+  c.width=w;c.height=h;
+  c.getContext('2d').drawImage(img,0,0,w,h);
+  return c;
+}
 
+// RGB -> LAB conversion
+function rgb2lab(r,g,b){
+  r/=255;g/=255;b/=255;
+  r=r>0.04045?Math.pow((r+0.055)/1.055,2.4):r/12.92;
+  g=g>0.04045?Math.pow((g+0.055)/1.055,2.4):g/12.92;
+  b=b>0.04045?Math.pow((b+0.055)/1.055,2.4):b/12.92;
+  let x=r*0.4124+g*0.3576+b*0.1805;
+  let y=r*0.2126+g*0.7152+b*0.0722;
+  let z=r*0.0193+g*0.1192+b*0.9505;
+  x/=0.95047;y/=1.00000;z/=1.08883;
+  x=x>0.008856?Math.pow(x,1/3):7.787*x+16/116;
+  y=y>0.008856?Math.pow(y,1/3):7.787*y+16/116;
+  z=z>0.008856?Math.pow(z,1/3):7.787*z+16/116;
+  return[116*y-16,500*(x-y),200*(y-z)];
+}
 
-async function predict(jacketUrl,fabricUrl,strength){
-  const body={
-    version:VER,
-    input:{
-      content_image:'data:image/jpeg;base64,'+jacketUrl,
-      style_image:'data:image/jpeg;base64,'+fabricUrl,
-      style_strength:strength,
-      output_quality:95
-    }
-  };
-  const r=await fetch(PROXY+'/v1/predictions',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(body)
-  });
-  if(!r.ok){const e=await r.json();throw new Error(e.detail||JSON.stringify(e));}
-  const pred=await r.json();
-  for(let i=0;i<90;i++){
-    await new Promise(r=>setTimeout(r,2500));
-    const p=await fetch(PROXY+'/v1/predictions/'+pred.id);
-    const d=await p.json();
-    if(d.status==='succeeded')return Array.isArray(d.output)?d.output[0]:d.output;
-    if(d.status==='failed')throw new Error(d.error||'Génération échouée');
+// LAB -> RGB conversion
+function lab2rgb(L,a,b){
+  let y=(L+16)/116,x=a/500+y,z=y-b/200;
+  x=x*x*x>0.008856?x*x*x:(x-16/116)/7.787;
+  y=y*y*y>0.008856?y*y*y:(y-16/116)/7.787;
+  z=z*z*z>0.008856?z*z*z:(z-16/116)/7.787;
+  x*=0.95047;y*=1.00000;z*=1.08883;
+  let r=x*3.2406+y*(-1.5372)+z*(-0.4986);
+  let g=x*(-0.9689)+y*1.8758+z*0.0415;
+  let bl=x*0.0557+y*(-0.2040)+z*1.0570;
+  r=r>0.0031308?1.055*Math.pow(r,1/2.4)-0.055:12.92*r;
+  g=g>0.0031308?1.055*Math.pow(g,1/2.4)-0.055:12.92*g;
+  bl=bl>0.0031308?1.055*Math.pow(bl,1/2.4)-0.055:12.92*bl;
+  return[Math.round(Math.max(0,Math.min(255,r*255))),Math.round(Math.max(0,Math.min(255,g*255))),Math.round(Math.max(0,Math.min(255,bl*255)))];
+}
+
+// Get mean LAB values from fabric swatch
+function getFabricLAB(fabCanvas){
+  const ctx=fabCanvas.getContext('2d');
+  const data=ctx.getImageData(0,0,fabCanvas.width,fabCanvas.height).data;
+  let sumL=0,sumA=0,sumB=0,n=0;
+  for(let i=0;i<data.length;i+=4){
+    const [L,a,b]=rgb2lab(data[i],data[i+1],data[i+2]);
+    sumL+=L;sumA+=a;sumB+=b;n++;
   }
-  throw new Error('Timeout');
+  return[sumL/n,sumA/n,sumB/n];
 }
 
-function setCard(id,name,state,url,err){
+// Create jacket mask: detect non-white pixels (the jacket)
+function createMask(jacketCanvas){
+  const {width:w,height:h}=jacketCanvas;
+  const ctx=jacketCanvas.getContext('2d');
+  const data=ctx.getImageData(0,0,w,h).data;
+  const mask=new Float32Array(w*h);
+  for(let i=0;i<w*h;i++){
+    const r=data[i*4],g=data[i*4+1],b=data[i*4+2];
+    // White background detection
+    const isWhite=r>230&&g>230&&b>230;
+    mask[i]=isWhite?0:1;
+  }
+  // Blur the mask for smooth edges
+  return blurMask(mask,w,h,3);
+}
+
+function blurMask(mask,w,h,radius){
+  const out=new Float32Array(w*h);
+  const size=radius*2+1;
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let sum=0,cnt=0;
+      for(let dy=-radius;dy<=radius;dy++){
+        for(let dx=-radius;dx<=radius;dx++){
+          const ny=y+dy,nx=x+dx;
+          if(ny>=0&&ny<h&&nx>=0&&nx<w){sum+=mask[ny*w+nx];cnt++;}
+        }
+      }
+      out[y*w+x]=sum/cnt;
+    }
+  }
+  return out;
+}
+
+// Apply fabric LAB to jacket using mask
+async function applyFabricToJacket(jacketB64,fabB64,strength){
+  const [jImg,fImg]=await Promise.all([loadImage(jacketB64),loadImage(fabB64)]);
+  
+  const jCanvas=imgToCanvas(jImg,1024);
+  const fCanvas=imgToCanvas(fImg,256);
+  
+  const w=jCanvas.width,h=jCanvas.height;
+  const jCtx=jCanvas.getContext('2d');
+  const jData=jCtx.getImageData(0,0,w,h);
+  const pixels=jData.data;
+  
+  // Get fabric average LAB
+  const[fabL,fabA,fabB2]=getFabricLAB(fCanvas);
+  
+  // Get fabric texture data (tiled)
+  const fCtx=fCanvas.getContext('2d');
+  const fData=fCtx.getImageData(0,0,fCanvas.width,fCanvas.height).data;
+  const fw=fCanvas.width,fh=fCanvas.height;
+  
+  // Create mask
+  const mask=createMask(jCanvas);
+  
+  // Apply LAB transfer
+  for(let i=0;i<w*h;i++){
+    const m=mask[i];
+    if(m<0.01)continue;
+    
+    const pi=i*4;
+    const r=pixels[pi],g=pixels[pi+1],b=pixels[pi+2];
+    const[L,A,B3]=rgb2lab(r,g,b);
+    
+    // Get fabric texture at this pixel (tiled)
+    const fx=(i%w)%fw;
+    const fy=Math.floor(i/w)%fh;
+    const fi=(fy*fw+fx)*4;
+    const[fTexL,fTexA,fTexB]=rgb2lab(fData[fi],fData[fi+1],fData[fi+2]);
+    
+    // Keep jacket luminosity (L), apply fabric chrominance (A,B) + texture detail
+    const newL=L+(fTexL-fabL)*0.15; // subtle texture in luminosity
+    const newA=A*(1-strength)+fabA*strength;
+    const newB=B3*(1-strength)+fabB2*strength;
+    
+    const[nr,ng,nb]=lab2rgb(newL,newA,newB);
+    pixels[pi]=Math.round(r*(1-m)+nr*m);
+    pixels[pi+1]=Math.round(g*(1-m)+ng*m);
+    pixels[pi+2]=Math.round(b*(1-m)+nb*m);
+  }
+  
+  jCtx.putImageData(jData,0,0);
+  return jCanvas.toDataURL('image/jpeg',0.95);
+}
+
+// ── UI ──────────────────────────────────────────────────────────────────────
+
+function setCard(id,name,state,dataUrl,err){
   const rg=document.getElementById('rGrid');
   rg.style.display='grid';
   document.getElementById('emp').style.display='none';
@@ -249,7 +361,7 @@ function setCard(id,name,state,url,err){
   if(state==='loading'){
     el.innerHTML=`<div class="lbox"><div class="spin"></div><div style="font-size:11px;color:#888">${name}</div></div>`;
   }else if(state==='done'){
-    el.innerHTML=`<div class="rt"><img src="${url}"/><span class="rb">Nouveau tissu</span></div><div class="ri"><div class="rn">${name}</div><a href="${url}" target="_blank" download>Télécharger</a></div>`;
+    el.innerHTML=`<div class="rt"><img src="${dataUrl}"/><span class="rb">Nouveau tissu</span></div><div class="ri"><div class="rn">${name}</div><a href="${dataUrl}" download="${name}_tissu.jpg">Télécharger</a></div>`;
   }else{
     el.innerHTML=`<div style="min-height:80px;background:#fef2f2;display:flex;align-items:center;padding:10px"><span class="rerr">❌ ${err}</span></div><div class="ri"><div class="rn">${name}</div></div>`;
   }
@@ -262,7 +374,6 @@ async function processQueue(tasks,conc){
 }
 
 async function run(){
-
   if(!fabB64){alert('Uploadez un échantillon de tissu');return;}
   const toProcess=jackets.filter(j=>j.sel);
   if(!toProcess.length){alert('Sélectionnez au moins une veste');return;}
@@ -270,27 +381,21 @@ async function run(){
   const btn=document.getElementById('goBtn');
   const conc=parseInt(document.getElementById('conc').value);
   const str=parseFloat(document.getElementById('str').value);
-  btn.disabled=true;btn.textContent='⏳ Génération...';
+  btn.disabled=true;btn.textContent='⏳ Traitement...';
   document.getElementById('rGrid').innerHTML='';
   document.getElementById('rGrid').style.display='none';
   document.getElementById('emp').style.display='block';
   document.getElementById('pb').style.width='0';
   const st=document.getElementById('st');
-
-  // Prepare fabric base64
-  st.textContent='Préparation du tissu...';
-  const fabResized=await resize(fabB64,384);
-  const fabB64clean=fabResized.split(',')[1];
+  st.textContent='Démarrage...';
 
   let done=0;
   toProcess.forEach(j=>setCard(j.id,j.name,'loading'));
 
   const tasks=toProcess.map(j=>async()=>{
     try{
-      const jResized=await resize(j.b64,768);
-      const jB64clean=jResized.split(',')[1];
-      const url=await predict(jB64clean,fabB64clean,str);
-      setCard(j.id,j.name,'done',url,null);
+      const result=await applyFabricToJacket(j.b64,fabB64,str);
+      setCard(j.id,j.name,'done',result,null);
     }catch(e){
       setCard(j.id,j.name,'error',null,e.message);
     }
@@ -300,8 +405,8 @@ async function run(){
   });
 
   await processQueue(tasks,conc);
-  st.textContent=`🎉 Terminé — ${done} veste(s) générée(s)`;
-  btn.disabled=false;btn.textContent='⚡ Générer les images';
+  st.textContent=`🎉 Terminé — ${done} veste(s) traitée(s)`;
+  btn.disabled=false;btn.textContent='⚡ Appliquer le tissu';
 }
 </script>
 </body>
