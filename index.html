@@ -226,33 +226,35 @@ async function applyFabric(jB64,fB64,texStrength){
   }
   const fML=fSL/fN,fMA=fSA/fN,fMB=fSB/fN;
 
-  // Apply: Reinhard color transfer + tiled texture overlay
+  // Apply fabric using Photoshop-style multiply blend
+  // Fabric pixel tiled on jacket, shadows from jacket preserved via luminosity
   for(let i=0;i<w*h;i++){
     const m=mask[i];
     if(m<0.01)continue;
     const pi=i*4;
-    const[L,A,B]=rgb2lab(px[pi],px[pi+1],px[pi+2]);
+
+    // Original jacket pixel
+    const jr=px[pi],jg=px[pi+1],jb=px[pi+2];
 
     // Tiled fabric texture pixel
     const fx=(i%w)%fw,fy=Math.floor(i/w)%fh;
     const fi=(fy*fw+fx)*4;
-    const[fTL,fTA,fTB]=rgb2lab(fd[fi],fd[fi+1],fd[fi+2]);
+    const fr=fd[fi],fg=fd[fi+1],fb2=fd[fi+2];
 
-    // Reinhard: shift jacket LAB stats toward fabric LAB stats
-    const rL=fML+(L-jML);   // full luminosity transfer
-    const rA=fMA+(A-jMA)*0.4; // partial chroma
-    const rB=fMB+(B-jMB)*0.4;
+    // Extract jacket luminosity (how light/dark this pixel is vs jacket average)
+    const[jL]=rgb2lab(jr,jg,jb);
+    const shadow=jL/jML; // shadow factor: <1 = shadow, >1 = highlight
 
-    // Add fabric texture detail (high-frequency luminosity variation)
-    const texL=rL+(fTL-fML)*texStrength;
-    const texA=rA+(fTA-fMA)*texStrength*0.6;
-    const texB=rB+(fTB-fMB)*texStrength*0.6;
+    // Apply shadow factor to fabric pixel
+    const nr=Math.max(0,Math.min(255,fr*shadow));
+    const ng=Math.max(0,Math.min(255,fg*shadow));
+    const nb=Math.max(0,Math.min(255,fb2*shadow));
 
-    // Blend with mask
-    const[nr,ng,nb]=lab2rgb(texL,texA,texB);
-    px[pi]  =Math.round(px[pi]  *(1-m)+nr*m);
-    px[pi+1]=Math.round(px[pi+1]*(1-m)+ng*m);
-    px[pi+2]=Math.round(px[pi+2]*(1-m)+nb*m);
+    // Mix original vs result based on mask + texStrength
+    const blend=m*texStrength;
+    px[pi]  =Math.round(jr*(1-blend)+nr*blend);
+    px[pi+1]=Math.round(jg*(1-blend)+ng*blend);
+    px[pi+2]=Math.round(jb*(1-blend)+nb*blend);
   }
   jCtx.putImageData(jd,0,0);
   return jC.toDataURL('image/jpeg',0.95);
