@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Changeur de tissu</title>
+<title>Changeur de tissu — Anastasi Couture</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f5f5f3;color:#1a1a1a;min-height:100vh}
@@ -25,6 +25,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .jgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
 .jcard{position:relative;border:2px solid #e5e5e5;border-radius:8px;overflow:hidden;background:#fff}
 .jcard.sel{border-color:#2563eb}
+.jcard.done{border-color:#16a34a}
 .jcard img{width:100%;height:120px;object-fit:cover;display:block;cursor:pointer}
 .jcard .jn{padding:4px 6px;font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .jcard .jdel{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center}
@@ -39,7 +40,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .prog{height:4px;background:#e5e5e5;border-radius:2px;margin-bottom:8px;overflow:hidden}
 .pb{height:100%;background:#2563eb;border-radius:2px;transition:width .4s;width:0}
 .st{font-size:12px;color:#555;margin-bottom:16px;min-height:18px}
-.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:12px}
+.rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 .rcard{border:1px solid #e5e5e5;border-radius:10px;overflow:hidden;background:#fff}
 .rcard .rt{position:relative}
 .rcard img{width:100%;display:block}
@@ -53,17 +54,24 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 @keyframes sp{to{transform:rotate(360deg)}}
 .lbox{height:160px;background:#f9f9f9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
 .empty{text-align:center;padding:40px;color:#bbb;font-size:13px;border:1px dashed #ddd;border-radius:12px}
-select{width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:8px}
+select,input[type=password]{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:8px}
 input[type=range]{width:100%}
-.hint{font-size:10px;color:#aaa;margin-top:3px}
+.hint{font-size:10px;color:#aaa;margin-top:3px;line-height:1.4}
+.tag{display:inline-block;background:#f0f4ff;color:#2563eb;font-size:10px;padding:2px 6px;border-radius:4px;margin-top:4px}
 </style>
 </head>
 <body>
 <div class="app">
 <h1>Changeur de tissu</h1>
-<p class="sub">Uploadez vos vestes + votre échantillon — génération automatique via Replicate</p>
+<p class="sub">Uploadez vos vestes + votre échantillon — génération automatique</p>
 <div class="panels">
 <div class="left">
+  <div class="panel">
+    <div class="pt">Statut</div>
+    <div style="font-size:11px;color:#16a34a;font-weight:500">✓ Prêt à générer</div>
+    <div class="hint" style="margin-top:6px">Les images sont envoyées directement à Replicate via le proxy sécurisé.</div>
+  </div>
+
   <div class="panel">
     <div class="pt">Échantillon de tissu</div>
     <div class="drop fab-drop" id="fDrop">
@@ -73,22 +81,22 @@ input[type=range]{width:100%}
       <div id="fLbl" style="font-size:11px;color:#888;margin-top:4px"></div>
     </div>
   </div>
+
   <div class="panel">
     <div class="pt">Paramètres</div>
     <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Images en parallèle</label>
     <select id="conc">
-      <option value="3">3 à la fois (recommandé)</option>
+      <option value="3">3 à la fois</option>
       <option value="5">5 à la fois</option>
-      <option value="10">10 à la fois</option>
       <option value="1">1 à la fois</option>
     </select>
-    <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Intensité du changement</label>
-    <input type="range" id="str" min="0.4" max="0.85" step="0.05" value="0.65"/>
+    <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Intensité du style</label>
+    <input type="range" id="str" min="0.3" max="1.0" step="0.05" value="0.7"/>
     <div style="display:flex;justify-content:space-between;font-size:10px;color:#888">
-      <span>Conservateur</span><span id="strV">0.65</span><span>Agressif</span>
+      <span>Subtil</span><span id="strV">0.70</span><span>Fort</span>
     </div>
-    <div class="hint">Plus élevé = tissu plus visible mais silhouette moins fidèle</div>
   </div>
+
   <div class="panel">
     <div class="pt">Actions</div>
     <button class="btn" style="width:100%;margin-bottom:6px" onclick="selAll()">Tout sélectionner</button>
@@ -96,14 +104,15 @@ input[type=range]{width:100%}
     <button class="btn" style="width:100%;color:#dc2626;border-color:#fca5a5" onclick="clearAll()">Vider les vestes</button>
   </div>
 </div>
+
 <div>
   <div class="panel" style="margin-bottom:14px">
-    <div class="pt">Vos vestes</div>
+    <div class="pt">Vos vestes <span class="tag">40+ photos supportées</span></div>
     <div class="drop jdrop" id="jDrop">
       <input type="file" accept="image/*" multiple onchange="loadJ(this.files)"/>
       <div style="font-size:26px;margin-bottom:8px">👔</div>
       <strong style="font-size:13px">Glissez vos photos ici</strong><br>
-      <span style="font-size:12px;color:#888">ou cliquez pour sélectionner (JPG, PNG — 40+ photos)</span>
+      <span style="font-size:12px;color:#888">ou cliquez pour sélectionner</span>
     </div>
     <div id="jCnt" style="font-size:12px;color:#2563eb;font-weight:500;margin-bottom:10px"></div>
     <div class="jgrid" id="jGrid"></div>
@@ -119,14 +128,17 @@ input[type=range]{width:100%}
 </div>
 </div>
 </div>
+
 <script>
 const PROXY='https://lingering-bonus-81c4.r552fmfpkh.workers.dev';
-const VER='39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b';
-let jackets=[],fabB64=null,fabAnalysis='';
+const VER='f1023890703bc0a5a3a2c21b5e498833be5f6ef6e70e9daf6b9b3a4fd8309cf0';
 
-document.getElementById('str').oninput=function(){document.getElementById('strV').textContent=parseFloat(this.value).toFixed(2);};
+let jackets=[],fabB64=null,fabUrl=null;
 
-// Drag & drop
+document.getElementById('str').oninput=function(){
+  document.getElementById('strV').textContent=parseFloat(this.value).toFixed(2);
+};
+
 ['fDrop','jDrop'].forEach(id=>{
   const el=document.getElementById(id);
   el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('over');});
@@ -143,48 +155,23 @@ function loadFab(file){
   const r=new FileReader();
   r.onload=e=>{
     fabB64=e.target.result;
+    fabUrl=null;
     document.getElementById('fImg').src=fabB64;
     document.getElementById('fImg').style.display='block';
     document.getElementById('fPh').style.display='none';
     document.getElementById('fLbl').textContent=file.name;
     updateBtn();
-    analyzeFabric();
   };
   r.readAsDataURL(file);
-}
-
-function analyzeFabric(){
-  // Extract dominant color from fabric swatch
-  const img=new Image();
-  img.onload=()=>{
-    const c=document.createElement('canvas');
-    c.width=50;c.height=50;
-    const ctx=c.getContext('2d');
-    ctx.drawImage(img,0,0,50,50);
-    const d=ctx.getImageData(0,0,50,50).data;
-    let r=0,g=0,b=0,cnt=0;
-    for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];cnt++;}
-    r=Math.round(r/cnt);g=Math.round(g/cnt);b=Math.round(b/cnt);
-    const hex=((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
-    // Describe color
-    let colorDesc='';
-    if(r<80&&g<80&&b<80)colorDesc='very dark charcoal';
-    else if(r<100&&g<100&&b>130)colorDesc='dark navy blue';
-    else if(r>180&&g>150&&b<100)colorDesc='warm beige';
-    else if(r>160&&g>160&&b>160)colorDesc='light grey';
-    else if(r<120&&g<120&&b<120)colorDesc='dark grey';
-    else if(r>150&&g>120&&b<80)colorDesc='camel brown';
-    else colorDesc=`rgb(${r},${g},${b}) colored`;
-    fabAnalysis=`${colorDesc} fabric texture, hex #${hex}`;
-    document.getElementById('fLbl').textContent+=' — '+colorDesc;
-  };
-  img.src=fabB64;
 }
 
 function loadJ(files){
   Array.from(files).forEach(file=>{
     const r=new FileReader();
-    r.onload=e=>{ jackets.push({id:Date.now()+Math.random(),name:file.name.replace(/\.[^.]+$/,''),b64:e.target.result,sel:true}); renderJ(); };
+    r.onload=e=>{
+      jackets.push({id:Date.now()+Math.random(),name:file.name.replace(/\.[^.]+$/,''),b64:e.target.result,url:null,sel:true});
+      renderJ();
+    };
     r.readAsDataURL(file);
   });
 }
@@ -196,7 +183,8 @@ function renderJ(){
   updateBtn();
   const g=document.getElementById('jGrid');g.innerHTML='';
   jackets.forEach((j,i)=>{
-    const d=document.createElement('div');d.className='jcard'+(j.sel?' sel':'');
+    const d=document.createElement('div');
+    d.className='jcard'+(j.sel?' sel':'');
     d.innerHTML=`<img src="${j.b64}" onclick="togJ(${i})"/>${j.sel?'<div class="jck">✓</div>':''}<button class="jdel" onclick="delJ(${i})">×</button><div class="jn">${j.name}</div>`;
     g.appendChild(d);
   });
@@ -217,34 +205,37 @@ async function resize(dataUrl,maxW){
       const c=document.createElement('canvas');
       c.width=w;c.height=Math.round(img.naturalHeight*w/img.naturalWidth);
       c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-      res(c.toDataURL('image/jpeg',0.88).split(',')[1]);
+      res(c.toDataURL('image/jpeg',0.88));
     };
     img.src=dataUrl;
   });
 }
 
-async function predict(jB64, fabB64, strength){
-  // Use fofr/style-transfer: content_image (jacket) + style_image (fabric swatch)
+
+
+async function predict(jacketUrl,fabricUrl,strength){
   const body={
-    version:'f1023890703bc0a5a3a2c21b5e498833be5f6ef6e70e9daf6b9b3a4fd8309cf0',
+    version:VER,
     input:{
-      content_image:'data:image/jpeg;base64,'+jB64,
-      style_image:'data:image/jpeg;base64,'+fabB64,
+      content_image:'data:image/jpeg;base64,'+jacketUrl,
+      style_image:'data:image/jpeg;base64,'+fabricUrl,
       style_strength:strength,
-      content_strength: 1.0 - strength * 0.3,
-      output_quality:90,
-      seed:42
+      output_quality:95
     }
   };
-  const r=await fetch(PROXY+'/v1/predictions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const r=await fetch(PROXY+'/v1/predictions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body)
+  });
   if(!r.ok){const e=await r.json();throw new Error(e.detail||JSON.stringify(e));}
   const pred=await r.json();
   for(let i=0;i<90;i++){
     await new Promise(r=>setTimeout(r,2500));
     const p=await fetch(PROXY+'/v1/predictions/'+pred.id);
     const d=await p.json();
-    if(d.status==='succeeded')return d.output?.[0]||d.output;
-    if(d.status==='failed')throw new Error(d.error||'Échec');
+    if(d.status==='succeeded')return Array.isArray(d.output)?d.output[0]:d.output;
+    if(d.status==='failed')throw new Error(d.error||'Génération échouée');
   }
   throw new Error('Timeout');
 }
@@ -258,7 +249,7 @@ function setCard(id,name,state,url,err){
   if(state==='loading'){
     el.innerHTML=`<div class="lbox"><div class="spin"></div><div style="font-size:11px;color:#888">${name}</div></div>`;
   }else if(state==='done'){
-    el.innerHTML=`<div class="rt"><img src="${url}"/><span class="rb">Nouveau tissu</span></div><div class="ri"><div class="rn">${name}</div><a href="${url}" target="_blank">Voir · Télécharger</a></div>`;
+    el.innerHTML=`<div class="rt"><img src="${url}"/><span class="rb">Nouveau tissu</span></div><div class="ri"><div class="rn">${name}</div><a href="${url}" target="_blank" download>Télécharger</a></div>`;
   }else{
     el.innerHTML=`<div style="min-height:80px;background:#fef2f2;display:flex;align-items:center;padding:10px"><span class="rerr">❌ ${err}</span></div><div class="ri"><div class="rn">${name}</div></div>`;
   }
@@ -271,9 +262,11 @@ async function processQueue(tasks,conc){
 }
 
 async function run(){
+
   if(!fabB64){alert('Uploadez un échantillon de tissu');return;}
   const toProcess=jackets.filter(j=>j.sel);
   if(!toProcess.length){alert('Sélectionnez au moins une veste');return;}
+
   const btn=document.getElementById('goBtn');
   const conc=parseInt(document.getElementById('conc').value);
   const str=parseFloat(document.getElementById('str').value);
@@ -283,22 +276,29 @@ async function run(){
   document.getElementById('emp').style.display='block';
   document.getElementById('pb').style.width='0';
   const st=document.getElementById('st');
-  st.textContent='Préparation...';
-  const fabS=await resize(fabB64,512);
+
+  // Prepare fabric base64
+  st.textContent='Préparation du tissu...';
+  const fabResized=await resize(fabB64,384);
+  const fabB64clean=fabResized.split(',')[1];
+
   let done=0;
   toProcess.forEach(j=>setCard(j.id,j.name,'loading'));
+
   const tasks=toProcess.map(j=>async()=>{
     try{
-      const jS=await resize(j.b64,768);
-      const url=await predict(jS,fabS,str);
+      const jResized=await resize(j.b64,768);
+      const jB64clean=jResized.split(',')[1];
+      const url=await predict(jB64clean,fabB64clean,str);
       setCard(j.id,j.name,'done',url,null);
     }catch(e){
       setCard(j.id,j.name,'error',null,e.message);
     }
     done++;
     document.getElementById('pb').style.width=Math.round(done/toProcess.length*100)+'%';
-    st.textContent=`✅ ${done}/${toProcess.length} traitée(s) — ${toProcess.length-done} restante(s)`;
+    st.textContent=`✅ ${done}/${toProcess.length} traitée(s)`;
   });
+
   await processQueue(tasks,conc);
   st.textContent=`🎉 Terminé — ${done} veste(s) générée(s)`;
   btn.disabled=false;btn.textContent='⚡ Générer les images';
