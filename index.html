@@ -25,6 +25,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .jgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
 .jcard{position:relative;border:2px solid #e5e5e5;border-radius:8px;overflow:hidden;background:#fff}
 .jcard.sel{border-color:#2563eb}
+.jcard.done{border-color:#16a34a}
 .jcard img{width:100%;height:120px;object-fit:cover;display:block;cursor:pointer}
 .jcard .jn{padding:4px 6px;font-size:10px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .jcard .jdel{position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center}
@@ -54,14 +55,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .lbox{height:160px;background:#f9f9f9;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px}
 .empty{text-align:center;padding:40px;color:#bbb;font-size:13px;border:1px dashed #ddd;border-radius:12px}
 select{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:8px}
-input[type=range]{width:100%}
 .hint{font-size:10px;color:#aaa;margin-top:4px;line-height:1.4}
+.badge-ai{display:inline-block;background:#10a37f;color:#fff;font-size:10px;padding:2px 7px;border-radius:4px;margin-left:6px;vertical-align:middle}
 </style>
 </head>
 <body>
 <div class="app">
-<h1>Changeur de tissu</h1>
-<p class="sub">Uploadez vos vestes + votre échantillon — application automatique</p>
+<h1>Changeur de tissu <span class="badge-ai">GPT-4o</span></h1>
+<p class="sub">Uploadez vos vestes + votre échantillon — résultat photo-réaliste identique à ChatGPT</p>
 <div class="panels">
 <div class="left">
   <div class="panel">
@@ -73,22 +74,18 @@ input[type=range]{width:100%}
       <div id="fLbl" style="font-size:11px;color:#888;margin-top:4px"></div>
     </div>
   </div>
+
   <div class="panel">
     <div class="pt">Paramètres</div>
     <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Images en parallèle</label>
     <select id="conc">
-      <option value="4">4 à la fois</option>
-      <option value="8">8 à la fois</option>
       <option value="2">2 à la fois</option>
+      <option value="3">3 à la fois</option>
       <option value="1">1 à la fois</option>
     </select>
-    <label style="font-size:11px;color:#666;display:block;margin-bottom:4px">Intensité texture (0.5–1.0)</label>
-    <input type="range" id="tex" min="0.3" max="1.0" step="0.05" value="0.7"/>
-    <div style="display:flex;justify-content:space-between;font-size:10px;color:#888">
-      <span>Subtil</span><span id="texV">0.70</span><span>Fort</span>
-    </div>
-    <div class="hint">0.7 = texture visible + ombres préservées</div>
+    <div class="hint">GPT-4o : ~30s par image, résultat professionnel</div>
   </div>
+
   <div class="panel">
     <div class="pt">Actions</div>
     <button class="btn" style="width:100%;margin-bottom:6px" onclick="selAll()">Tout sélectionner</button>
@@ -96,6 +93,7 @@ input[type=range]{width:100%}
     <button class="btn" style="width:100%;color:#dc2626;border-color:#fca5a5" onclick="clearAll()">Vider les vestes</button>
   </div>
 </div>
+
 <div>
   <div class="panel" style="margin-bottom:14px">
     <div class="pt">Vos vestes</div>
@@ -103,14 +101,14 @@ input[type=range]{width:100%}
       <input type="file" accept="image/*" multiple onchange="loadJ(this.files)"/>
       <div style="font-size:26px;margin-bottom:8px">👔</div>
       <strong style="font-size:13px">Glissez vos photos ici</strong><br>
-      <span style="font-size:12px;color:#888">ou cliquez (40+ photos supportées)</span>
+      <span style="font-size:12px;color:#888">ou cliquez pour sélectionner (40+ photos supportées)</span>
     </div>
     <div id="jCnt" style="font-size:12px;color:#2563eb;font-weight:500;margin-bottom:10px"></div>
     <div class="jgrid" id="jGrid"></div>
   </div>
   <div class="acts">
     <span class="si" id="sInfo">0 veste(s) sélectionnée(s)</span>
-    <button class="bgo btn" id="goBtn" onclick="run()" disabled>⚡ Appliquer le tissu</button>
+    <button class="bgo btn" id="goBtn" onclick="run()" disabled>⚡ Générer avec GPT-4o</button>
   </div>
   <div class="prog"><div class="pb" id="pb"></div></div>
   <div class="st" id="st"></div>
@@ -119,18 +117,62 @@ input[type=range]{width:100%}
 </div>
 </div>
 </div>
+
 <script>
-let jackets=[],fabB64=null;
-document.getElementById('tex').oninput=function(){document.getElementById('texV').textContent=parseFloat(this.value).toFixed(2);};
+const OPENAI_KEY = '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';
+
+let jackets=[], fabB64=null;
+
 ['fDrop','jDrop'].forEach(id=>{
   const el=document.getElementById(id);
   el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('over');});
   el.addEventListener('dragleave',()=>el.classList.remove('over'));
-  el.addEventListener('drop',e=>{e.preventDefault();el.classList.remove('over');if(id==='fDrop')loadFab(e.dataTransfer.files[0]);else loadJ(e.dataTransfer.files);});
+  el.addEventListener('drop',e=>{
+    e.preventDefault();el.classList.remove('over');
+    if(id==='fDrop')loadFab(e.dataTransfer.files[0]);
+    else loadJ(e.dataTransfer.files);
+  });
 });
-function loadFab(file){if(!file)return;const r=new FileReader();r.onload=e=>{fabB64=e.target.result;document.getElementById('fImg').src=fabB64;document.getElementById('fImg').style.display='block';document.getElementById('fPh').style.display='none';document.getElementById('fLbl').textContent=file.name;updateBtn();};r.readAsDataURL(file);}
-function loadJ(files){Array.from(files).forEach(file=>{const r=new FileReader();r.onload=e=>{jackets.push({id:Date.now()+Math.random(),name:file.name.replace(/\.[^.]+$/,''),b64:e.target.result,sel:true});renderJ();};r.readAsDataURL(file);});}
-function renderJ(){const sel=jackets.filter(j=>j.sel).length;document.getElementById('jCnt').textContent=jackets.length+' photo(s) chargée(s)';document.getElementById('sInfo').textContent=sel+' veste(s) sélectionnée(s)';updateBtn();const g=document.getElementById('jGrid');g.innerHTML='';jackets.forEach((j,i)=>{const d=document.createElement('div');d.className='jcard'+(j.sel?' sel':'');d.innerHTML=`<img src="${j.b64}" onclick="togJ(${i})"/>${j.sel?'<div class="jck">✓</div>':''}<button class="jdel" onclick="delJ(${i})">×</button><div class="jn">${j.name}</div>`;g.appendChild(d);});}
+
+function loadFab(file){
+  if(!file)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    fabB64=e.target.result;
+    document.getElementById('fImg').src=fabB64;
+    document.getElementById('fImg').style.display='block';
+    document.getElementById('fPh').style.display='none';
+    document.getElementById('fLbl').textContent=file.name;
+    updateBtn();
+  };
+  r.readAsDataURL(file);
+}
+
+function loadJ(files){
+  Array.from(files).forEach(file=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      jackets.push({id:Date.now()+Math.random(),name:file.name.replace(/\.[^.]+$/,''),b64:e.target.result,sel:true});
+      renderJ();
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+function renderJ(){
+  const sel=jackets.filter(j=>j.sel).length;
+  document.getElementById('jCnt').textContent=jackets.length+' photo(s) chargée(s)';
+  document.getElementById('sInfo').textContent=sel+' veste(s) sélectionnée(s)';
+  updateBtn();
+  const g=document.getElementById('jGrid');g.innerHTML='';
+  jackets.forEach((j,i)=>{
+    const d=document.createElement('div');
+    d.className='jcard'+(j.sel?' sel':'');
+    d.innerHTML=`<img src="${j.b64}" onclick="togJ(${i})"/>${j.sel?'<div class="jck">✓</div>':''}<button class="jdel" onclick="delJ(${i})">×</button><div class="jn">${j.name}</div>`;
+    g.appendChild(d);
+  });
+}
+
 function togJ(i){jackets[i].sel=!jackets[i].sel;renderJ();}
 function selAll(){jackets.forEach(j=>j.sel=true);renderJ();}
 function deselAll(){jackets.forEach(j=>j.sel=false);renderJ();}
@@ -138,136 +180,71 @@ function delJ(i){jackets.splice(i,1);renderJ();}
 function clearAll(){jackets=[];renderJ();document.getElementById('jCnt').textContent='';}
 function updateBtn(){document.getElementById('goBtn').disabled=!fabB64||jackets.filter(j=>j.sel).length===0;}
 
-function loadImg(src){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>res(img);img.onerror=rej;img.src=src;});}
-
-function toCanvas(img,maxW=1024){
-  const s=Math.min(1,maxW/img.naturalWidth);
-  const w=Math.round(img.naturalWidth*s),h=Math.round(img.naturalHeight*s);
-  const c=document.createElement('canvas');c.width=w;c.height=h;
-  c.getContext('2d').drawImage(img,0,0,w,h);return c;
+async function resize(dataUrl, maxW){
+  return new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      const w=Math.min(img.naturalWidth,maxW);
+      const c=document.createElement('canvas');
+      c.width=w;c.height=Math.round(img.naturalHeight*w/img.naturalWidth);
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      res(c.toDataURL('image/jpeg',0.9).split(',')[1]);
+    };
+    img.src=dataUrl;
+  });
 }
 
-function rgb2lab(r,g,b){
-  r/=255;g/=255;b/=255;
-  r=r>0.04045?Math.pow((r+0.055)/1.055,2.4):r/12.92;
-  g=g>0.04045?Math.pow((g+0.055)/1.055,2.4):g/12.92;
-  b=b>0.04045?Math.pow((b+0.055)/1.055,2.4):b/12.92;
-  let x=r*0.4124+g*0.3576+b*0.1805;
-  let y=r*0.2126+g*0.7152+b*0.0722;
-  let z=r*0.0193+g*0.1192+b*0.9505;
-  x/=0.95047;y/=1;z/=1.08883;
-  x=x>0.008856?Math.pow(x,1/3):7.787*x+16/116;
-  y=y>0.008856?Math.pow(y,1/3):7.787*y+16/116;
-  z=z>0.008856?Math.pow(z,1/3):7.787*z+16/116;
-  return[116*y-16,500*(x-y),200*(y-z)];
-}
-function lab2rgb(L,a,b){
-  let y=(L+16)/116,x=a/500+y,z=y-b/200;
-  x=x*x*x>0.008856?x*x*x:(x-16/116)/7.787;
-  y=y*y*y>0.008856?y*y*y:(y-16/116)/7.787;
-  z=z*z*z>0.008856?z*z*z:(z-16/116)/7.787;
-  x*=0.95047;y*=1;z*=1.08883;
-  let r=x*3.2406+y*(-1.5372)+z*(-0.4986);
-  let g=x*(-0.9689)+y*1.8758+z*0.0415;
-  let bl=x*0.0557+y*(-0.2040)+z*1.0570;
-  r=r>0.0031308?1.055*Math.pow(r,1/2.4)-0.055:12.92*r;
-  g=g>0.0031308?1.055*Math.pow(g,1/2.4)-0.055:12.92*g;
-  bl=bl>0.0031308?1.055*Math.pow(bl,1/2.4)-0.055:12.92*bl;
-  return[Math.round(Math.max(0,Math.min(255,r*255))),Math.round(Math.max(0,Math.min(255,g*255))),Math.round(Math.max(0,Math.min(255,bl*255)))];
-}
+async function generateWithGPT4o(jacketB64, fabricB64){
+  const response = await fetch('https://api.openai.com/v1/images/edits', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + OPENAI_KEY,
+    },
+    body: (() => {
+      const fd = new FormData();
+      // Convert jacket base64 to blob
+      const jBlob = b64toBlob(jacketB64, 'image/jpeg');
+      const fBlob = b64toBlob(fabricB64, 'image/jpeg');
+      fd.append('model', 'gpt-image-1');
+      fd.append('image[]', jBlob, 'jacket.jpg');
+      fd.append('image[]', fBlob, 'fabric.jpg');
+      fd.append('prompt', 'Replace the fabric of the suit jacket in the first image with the exact fabric texture and color from the second image (fabric swatch). Keep the identical jacket silhouette, cut, lapels, pockets, buttons, and mannequin. Keep the white background. The result must look like a professional product photo with the new fabric applied realistically with natural shadows and folds.');
+      fd.append('n', '1');
+      fd.append('size', '1024x1024');
+      return fd;
+    })()
+  });
 
-function getMask(canvas){
-  const{width:w,height:h}=canvas;
-  const d=canvas.getContext('2d').getImageData(0,0,w,h).data;
-  const m=new Float32Array(w*h);
-  // White background = 0, jacket = 1
-  for(let i=0;i<w*h;i++){
-    const r=d[i*4],g=d[i*4+1],b=d[i*4+2];
-    m[i]=(r>230&&g>230&&b>230)?0:1;
+  if(!response.ok){
+    const err = await response.json();
+    throw new Error(err.error?.message || JSON.stringify(err));
   }
-  // Gaussian blur for smooth edges
-  const o=new Float32Array(w*h),rad=5;
-  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
-    let s=0,n=0;
-    for(let dy=-rad;dy<=rad;dy++)for(let dx=-rad;dx<=rad;dx++){
-      const ny=y+dy,nx=x+dx;
-      if(ny>=0&&ny<h&&nx>=0&&nx<w){const w2=Math.exp(-(dx*dx+dy*dy)/(2*rad*rad));s+=m[ny*w+nx]*w2;n+=w2;}
-    }
-    o[y*w+x]=s/n;
-  }
-  return o;
+
+  const data = await response.json();
+  const b64 = data.data[0].b64_json;
+  return 'data:image/png;base64,' + b64;
 }
 
-async function applyFabric(jB64,fB64,texStrength){
-  const[jImg,fImg]=await Promise.all([loadImg(jB64),loadImg(fB64)]);
-  const jC=toCanvas(jImg,1024);
-  const fC=toCanvas(fImg,512); // larger fabric for better texture
-  const w=jC.width,h=jC.height,fw=fC.width,fh=fC.height;
-  const jCtx=jC.getContext('2d');
-  const jd=jCtx.getImageData(0,0,w,h);
-  const px=jd.data;
-  const fd=fC.getContext('2d').getImageData(0,0,fw,fh).data;
-
-  // Compute jacket LAB stats (masked pixels)
-  const mask=getMask(jC);
-  let jSL=0,jSA=0,jSB=0,jN=0;
-  for(let i=0;i<w*h;i++){
-    if(mask[i]<0.5)continue;
-    const[L,a,b]=rgb2lab(px[i*4],px[i*4+1],px[i*4+2]);
-    jSL+=L;jSA+=a;jSB+=b;jN++;
-  }
-  const jML=jSL/jN,jMA=jSA/jN,jMB=jSB/jN;
-
-  // Compute fabric LAB stats
-  let fSL=0,fSA=0,fSB=0,fN=0;
-  for(let i=0;i<fw*fh;i++){
-    const[L,a,b]=rgb2lab(fd[i*4],fd[i*4+1],fd[i*4+2]);
-    fSL+=L;fSA+=a;fSB+=b;fN++;
-  }
-  const fML=fSL/fN,fMA=fSA/fN,fMB=fSB/fN;
-
-  // Apply fabric using Photoshop-style multiply blend
-  // Fabric pixel tiled on jacket, shadows from jacket preserved via luminosity
-  for(let i=0;i<w*h;i++){
-    const m=mask[i];
-    if(m<0.01)continue;
-    const pi=i*4;
-
-    // Original jacket pixel
-    const jr=px[pi],jg=px[pi+1],jb=px[pi+2];
-
-    // Tiled fabric texture pixel
-    const fx=(i%w)%fw,fy=Math.floor(i/w)%fh;
-    const fi=(fy*fw+fx)*4;
-    const fr=fd[fi],fg=fd[fi+1],fb2=fd[fi+2];
-
-    // Extract jacket luminosity (how light/dark this pixel is vs jacket average)
-    const[jL]=rgb2lab(jr,jg,jb);
-    const shadow=jL/jML; // shadow factor: <1 = shadow, >1 = highlight
-
-    // Apply shadow factor to fabric pixel
-    const nr=Math.max(0,Math.min(255,fr*shadow));
-    const ng=Math.max(0,Math.min(255,fg*shadow));
-    const nb=Math.max(0,Math.min(255,fb2*shadow));
-
-    // Mix original vs result based on mask + texStrength
-    const blend=m*texStrength;
-    px[pi]  =Math.round(jr*(1-blend)+nr*blend);
-    px[pi+1]=Math.round(jg*(1-blend)+ng*blend);
-    px[pi+2]=Math.round(jb*(1-blend)+nb*blend);
-  }
-  jCtx.putImageData(jd,0,0);
-  return jC.toDataURL('image/jpeg',0.95);
+function b64toBlob(b64, mime){
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return new Blob([arr], {type: mime});
 }
 
 function setCard(id,name,state,url,err){
   const rg=document.getElementById('rGrid');
-  rg.style.display='grid';document.getElementById('emp').style.display='none';
+  rg.style.display='grid';
+  document.getElementById('emp').style.display='none';
   let el=document.getElementById('rc'+id);
   if(!el){el=document.createElement('div');el.className='rcard';el.id='rc'+id;rg.appendChild(el);}
-  if(state==='loading'){el.innerHTML=`<div class="lbox"><div class="spin"></div><div style="font-size:11px;color:#888">${name}</div></div>`;}
-  else if(state==='done'){el.innerHTML=`<div class="rt"><img src="${url}"/><span class="rb">Nouveau tissu</span></div><div class="ri"><div class="rn">${name}</div><a href="${url}" download="${name}_tissu.jpg">Télécharger</a></div>`;}
-  else{el.innerHTML=`<div style="min-height:80px;background:#fef2f2;display:flex;align-items:center;padding:10px"><span class="rerr">❌ ${err}</span></div><div class="ri"><div class="rn">${name}</div></div>`;}
+  if(state==='loading'){
+    el.innerHTML=`<div class="lbox"><div class="spin"></div><div style="font-size:11px;color:#888">${name}</div></div>`;
+  }else if(state==='done'){
+    el.innerHTML=`<div class="rt"><img src="${url}"/><span class="rb">GPT-4o</span></div><div class="ri"><div class="rn">${name}</div><a href="${url}" download="${name}_tissu.png">Télécharger</a></div>`;
+  }else{
+    el.innerHTML=`<div style="min-height:80px;background:#fef2f2;display:flex;align-items:center;padding:10px"><span class="rerr">❌ ${err}</span></div><div class="ri"><div class="rn">${name}</div></div>`;
+  }
 }
 
 async function processQueue(tasks,conc){
@@ -280,30 +257,37 @@ async function run(){
   if(!fabB64){alert('Uploadez un échantillon de tissu');return;}
   const toProcess=jackets.filter(j=>j.sel);
   if(!toProcess.length){alert('Sélectionnez au moins une veste');return;}
+
   const btn=document.getElementById('goBtn');
   const conc=parseInt(document.getElementById('conc').value);
-  const tex=parseFloat(document.getElementById('tex').value);
-  btn.disabled=true;btn.textContent='⏳ Traitement...';
+  btn.disabled=true;btn.textContent='⏳ Génération GPT-4o...';
   document.getElementById('rGrid').innerHTML='';
   document.getElementById('rGrid').style.display='none';
   document.getElementById('emp').style.display='block';
   document.getElementById('pb').style.width='0';
   const st=document.getElementById('st');
   st.textContent='Démarrage...';
+
+  const fabSmall = await resize(fabB64, 512);
   let done=0;
   toProcess.forEach(j=>setCard(j.id,j.name,'loading'));
+
   const tasks=toProcess.map(j=>async()=>{
     try{
-      const result=await applyFabric(j.b64,fabB64,tex);
-      setCard(j.id,j.name,'done',result,null);
-    }catch(e){setCard(j.id,j.name,'error',null,e.message);}
+      const jSmall = await resize(j.b64, 1024);
+      const url = await generateWithGPT4o(jSmall, fabSmall);
+      setCard(j.id,j.name,'done',url,null);
+    }catch(e){
+      setCard(j.id,j.name,'error',null,e.message);
+    }
     done++;
     document.getElementById('pb').style.width=Math.round(done/toProcess.length*100)+'%';
     st.textContent=`✅ ${done}/${toProcess.length} traitée(s)`;
   });
+
   await processQueue(tasks,conc);
-  st.textContent=`🎉 Terminé — ${done} veste(s) traitée(s)`;
-  btn.disabled=false;btn.textContent='⚡ Appliquer le tissu';
+  st.textContent=`🎉 Terminé — ${done} veste(s) générée(s)`;
+  btn.disabled=false;btn.textContent='⚡ Générer avec GPT-4o';
 }
 </script>
 </body>
