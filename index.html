@@ -130,7 +130,7 @@ select{width:100%;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-s
 <script>
 const PROXY='https://lingering-bonus-81c4.r552fmfpkh.workers.dev';
 // rembg - background removal to create mask
-const REMBG_VER='fb8af171cfa1616ddcf1242c093f9c46bcada5ad23d1f5a4930d4c0f0b27218';
+const REMBG_VER='4067ee2a58f6c161d434a9c077cfa012820b8e076efa2772aa171e26557da919';
 // stable-diffusion-inpainting
 const INPAINT_VER='95b7223104132402a9ae91cc677285bc5eb997834bd2349fa486f53910fd68b3';
 
@@ -276,12 +276,39 @@ async function getFabricDesc(dataUrl){
 
 // Create white mask from jacket (white=jacket area, black=background)
 async function createJacketMask(jacketB64){
-  // Use rembg to remove background, giving us the jacket silhouette
-  const maskUrl=await callReplicate(REMBG_VER,{
-    image:'data:image/jpeg;base64,'+jacketB64,
-    return_mask:true
+  // Use smoretalk/rembg-enhance to remove background
+  // Returns PNG with transparent background - we use alpha as mask
+  const resultUrl=await callReplicate(REMBG_VER,{
+    image:'data:image/jpeg;base64,'+jacketB64
   });
-  return maskUrl;
+  
+  // Convert transparent PNG to white mask (white=jacket, black=background)
+  const maskB64=await convertAlphaToMask(resultUrl);
+  return maskB64;
+}
+
+async function convertAlphaToMask(imageUrl){
+  return new Promise((res,rej)=>{
+    const img=new Image();
+    img.crossOrigin='anonymous';
+    img.onload=()=>{
+      const c=document.createElement('canvas');
+      c.width=img.width;c.height=img.height;
+      const ctx=c.getContext('2d');
+      ctx.drawImage(img,0,0);
+      const d=ctx.getImageData(0,0,c.width,c.height);
+      // Convert alpha channel to black/white mask
+      for(let i=0;i<d.data.length;i+=4){
+        const alpha=d.data[i+3];
+        const v=alpha>128?255:0;
+        d.data[i]=v;d.data[i+1]=v;d.data[i+2]=v;d.data[i+3]=255;
+      }
+      ctx.putImageData(d,0,0);
+      res(c.toDataURL('image/png').split(',')[1]);
+    };
+    img.onerror=rej;
+    img.src=imageUrl;
+  });
 }
 
 async function processJacket(jacketB64,fabColor){
@@ -294,7 +321,7 @@ async function processJacket(jacketB64,fabColor){
 
   const resultUrl=await callReplicate(INPAINT_VER,{
     image:'data:image/jpeg;base64,'+jacketB64,
-    mask:maskUrl,
+    mask:'data:image/png;base64,'+maskUrl,
     prompt:prompt,
     negative_prompt:negPrompt,
     num_inference_steps:50,
